@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Playfair Display", serif;
+  --font-sans: "Inter", sans-serif;
+  
+  --color-brand-light: #faf9f6;
+  --color-brand-nude: #e3dac9;
+  --color-brand-gold: #c5a059;
+
+  --animate-fade-in: fade-in 0.6s ease-out;
+  --animate-splash: splash 5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes splash {
+  0% { opacity: 0; transform: scale(0.95); }
+  10% { opacity: 1; transform: scale(1); }
+  90% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.05); }
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-brand-light);
+  color: #292524; /* stone-800 */
+}
+
+/* Organic background pattern */
+.bg-organic {
+  background-image: radial-gradient(circle at 15% 50%, rgba(227, 218, 201, 0.4), transparent 25%),
+                    radial-gradient(circle at 85% 30%, rgba(212, 212, 216, 0.3), transparent 25%);
+}
+
+.blob-shape {
+  border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+  animation: morph 8s ease-in-out infinite alternate;
+}
+
+@keyframes morph {
+  0% { border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
+  50% { border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%; }
+  100% { border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
+}

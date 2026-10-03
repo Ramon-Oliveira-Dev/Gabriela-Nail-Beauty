@@ -1,0 +1,239 @@
+{
+  "version": 1790930000000,
+  "updatedAt": "2026-10-02T08:38:00.000Z",
+  "services": [
+    {
+      "id": "1",
+      "name": "Alongamento em Gel",
+      "durationMinutes": 90,
+      "price": 150,
+      "description": "Alongamento com gel para unhas naturais mais longas, resistentes e elegantes.",
+      "imageUrl": "/aplicacao_1.webp",
+      "images": [
+        "/aplicacao_1.webp",
+        "/molde-f1.webp",
+        "/banho-de-gel.webp"
+      ],
+      "category": "aplicacao",
+      "complements": [
+        {
+          "id": "comp-along-1",
+          "name": "Francesinha / Reversa",
+          "description": "Técnica clássica ou moderna com ponta branca ou colorida impecável",
+          "price": 30,
+          "durationMinutes": 20,
+          "images": [
+            "/francesinha_1.jpg"
+          ]
+        },
+        {
+          "id": "comp-along-2",
+          "name": "Nail Art Personalizada",
+          "description": "Design exclusivo, pedrarias, folha de ouro ou traços artísticos",
+          "price": 25,
+          "durationMinutes": 20,
+          "images": [
+            "/manutencao-decorada.webp"
+          ]
+        },
+        {
+          "id": "comp-along-3",
+          "name": "Blindagem Extra com Top Coat",
+          "description": "Camada reforçada para brilho espelhado prolongado e proteção",
+          "price": 20,
+          "durationMinutes": 15,
+          "images": [
+            "/banho-de-gel.webp"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "2",
+      "name": "Manutenção de Alongamento",
+      "durationMinutes": 75,
+      "price": 100,
+      "description": "Nivelamento, reforço do ponto de tensão e acabamento impecável.",
+      "imageUrl": "/manutencao_1.webp",
+      "images": [
+        "/manutencao_1.webp",
+        "/manutencao-esmaltacao.webp",
+        "/manutencao-decorada.webp"
+      ],
+      "category": "manutencao",
+      "complements": [
+        {
+          "id": "comp-manut-1",
+          "name": "Reposição de Unha Quebrada",
+          "description": "Reconstrução completa de unha que quebrou ou trincou",
+          "price": 15,
+          "durationMinutes": 15,
+          "images": [
+            "/molde-f1.webp"
+          ]
+        },
+        {
+          "id": "comp-manut-2",
+          "name": "Esmaltação em Gel na Manutenção",
+          "description": "Aplicação de esmalte em gel sobre a manutenção com secagem em cabine",
+          "price": 35,
+          "durationMinutes": 25,
+          "images": [
+            "/manutencao-esmaltacao.webp"
+          ]
+        },
+        {
+          "id": "comp-manut-3",
+          "name": "Decoração Especial",
+          "description": "Arte nas unhas para renovar o visual na manutenção",
+          "price": 25,
+          "durationMinutes": 20,
+          "images": [
+            "/manutencao-decorada.webp"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "3",
+      "name": "Esmaltação em Gel",
+      "durationMinutes": 60,
+      "price": 80,
+      "description": "Mais durabilidade, brilho intenso e secagem imediata por até 20 dias.",
+      "imageUrl": "/esmaltacao_em_gel_1.webp",
+      "images": [
+        "/esmaltacao_em_gel_1.webp",
+        "/esmaltacao-em-gel.webp"
+      ],
+      "category": "esmaltacao",
+      "complements": [
+        {
+          "id": "comp-gel-1",
+          "name": "Cutilagem Completa Alinhada",
+          "description": "Cutilagem profissional profunda com acabamento contínuo",
+          "price": 20,
+          "durationMinutes": 15,
+          "images": [
+            "/outros_servicos_1.webp"
+          ]
+        },
+        {
+          "id": "comp-gel-2",
+          "name": "SPA das Mãos com Hidratação",
+          "description": "Esfoliação e hidratação profunda para mãos sedosas e renovadas",
+          "price": 25,
+          "durationMinutes": 15,
+          "images": [
+            "/espaco-atendimento.webp"
+          ]
+        },
+        {
+          "id": "comp-gel-3",
+          "name": "Francesinha Delicada",
+          "description": "Traço fino e delicado com esmalte em gel",
+          "price": 15,
+          "durationMinutes": 15,
+          "images": [
+            "/francesinha_1.jpg"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "4",
+      "name": "Manicure Tradicional",
+      "durationMinutes": 45,
+      "price": 60,
+      "description": "Cuidados essenciais, cutilagem alinhada e esmaltação perfeita.",
+      "imageUrl": "/outros_servicos_1.webp",
+      "images": [
+        "/outros_servicos_1.webp",
+        "/espaco-atendimento.webp",
+        "/francesinha_1.jpg"
+      ],
+      "category": "outros",
+      "complements": [
+        {
+          "id": "comp-mani-1",
+          "name": "Esfoliação e Hidratação SPA",
+          "description": "Tratamento com esfoliante e creme hidratante suave",
+          "price": 20,
+          "durationMinutes": 15,
+          "images": [
+            "/espaco-atendimento.webp"
+          ]
+        },
+        {
+          "id": "comp-mani-2",
+          "name": "Esmaltação Francesinha",
+          "description": "Traço clássico com acabamento perfeito",
+          "price": 10,
+          "durationMinutes": 10,
+          "images": [
+            "/francesinha_1.jpg"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "5",
+      "name": "Nail Art Personalizada",
+      "durationMinutes": 30,
+      "price": 25,
+      "description": "Design exclusivo, traços finos e detalhes para unhas especiais.",
+      "imageUrl": "/manutencao-decorada.webp",
+      "images": [
+        "/manutencao-decorada.webp",
+        "/francesinha_1.jpg"
+      ],
+      "category": "outros",
+      "complements": [
+        {
+          "id": "comp-art-1",
+          "name": "Aplicação de Pedrarias e Joias",
+          "description": "Pedrarias de alta fixação para ocasiões especiais",
+          "price": 15,
+          "durationMinutes": 15,
+          "images": [
+            "/manutencao-decorada.webp"
+          ]
+        },
+        {
+          "id": "comp-art-2",
+          "name": "Efeito Cromado / Holográfico",
+          "description": "Pó cromado de alto impacto visual",
+          "price": 15,
+          "durationMinutes": 10,
+          "images": [
+            "/esmaltacao-em-gel.webp"
+          ]
+        }
+      ]
+    }
+  ],
+  "categories": [
+    {
+      "id": "aplicacao",
+      "label": "Aplicações",
+      "description": "Molde F1 e banho de gel"
+    },
+    {
+      "id": "manutencao",
+      "label": "Manutenções",
+      "description": "Com esmaltação, decorada e vindo de outra profissional"
+    },
+    {
+      "id": "esmaltacao",
+      "label": "Esmaltação em Gel",
+      "description": "Pés ou mãos"
+    },
+    {
+      "id": "outros",
+      "label": "Outros Serviços",
+      "description": "Manicure clássica e detalhes artísticos"
+    }
+  ],
+  "appointments": [],
+  "blocks": [],
+  "clientProfiles": {}
+}

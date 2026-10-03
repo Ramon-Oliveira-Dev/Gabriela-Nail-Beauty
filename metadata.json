@@ -1,0 +1,6 @@
+{
+  "name": "Gabriela Nail&Beauty",
+  "description": "Aplicativo de agendamento de horários para salão de manicure e pedicure.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
