@@ -41,6 +41,23 @@ export const AdminArea: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
   const [email, setEmail] = useState('gabriela.nail.beauty@gmail.com');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockoutSeconds, setLockoutSeconds] = useState(0);
+
+  // Contador de bloqueio por tentativas excessivas
+  useEffect(() => {
+    if (lockoutSeconds <= 0) return;
+    const timer = setInterval(() => {
+      setLockoutSeconds(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [lockoutSeconds]);
   
   const { 
     appointments, 
@@ -132,18 +149,14 @@ export const AdminArea: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
   useEffect(() => {
     let isMounted = true;
 
+    // Limpeza defensiva de flags legadas de bypass
+    try {
+      localStorage.removeItem('admin_bypass');
+    } catch {}
+
     const verifyAdminSession = async () => {
       setIsCheckingAuth(true);
       setAuthError(null);
-
-      if (localStorage.getItem('admin_bypass') === 'true') {
-        if (isMounted) {
-          setCurrentUserEmail('gabriela.nail.beauty@gmail.com');
-          setIsAuthenticated(true);
-          setIsCheckingAuth(false);
-        }
-        return;
-      }
 
       const client = getSupabaseClient();
       if (!client) {
@@ -165,19 +178,23 @@ export const AdminArea: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
         }
 
         const user = session.user;
-        const userEmail = (user.email || '').toLowerCase().trim();
-        const { data: adminRow } = await client
+        const { data: adminRow, error: adminErr } = await client
           .from('admins')
-          .select('id, user_id, email')
-          .or(`user_id.eq.${user.id},email.ilike.${userEmail}`)
+          .select('user_id')
+          .eq('user_id', user.id)
           .maybeSingle();
 
-        if (adminRow && isMounted) {
-          if (!adminRow.user_id && user.id) {
-            try {
-              await client.from('admins').update({ user_id: user.id }).eq('id', adminRow.id);
-            } catch {}
+        if (adminErr) {
+          console.error('Erro ao verificar permissão na sessão:', adminErr);
+          await client.auth.signOut();
+          if (isMounted) {
+            setIsAuthenticated(false);
+            setCurrentUserEmail(null);
           }
+          return;
+        }
+
+        if (adminRow && isMounted) {
           setCurrentUserEmail(user.email || null);
           setIsAuthenticated(true);
         } else {
@@ -258,8 +275,20 @@ export const AdminArea: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (lockoutSeconds > 0) return;
     setAuthError(null);
     setIsLoggingIn(true);
+
+    const registerFailedAttempt = () => {
+      const next = failedAttempts + 1;
+      if (next >= 5) {
+        setLockoutSeconds(60);
+        setFailedAttempts(0);
+        setAuthError('Muitas tentativas incorretas. Botão bloqueado por 60 segundos.');
+      } else {
+        setFailedAttempts(next);
+      }
+    };
 
     const client = getSupabaseClient();
     if (!client) {
@@ -270,54 +299,41 @@ export const AdminArea: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
 
     try {
       const cleanEmail = email.trim().toLowerCase();
-      let authData = null;
-      let authError = null;
 
-      const res = await client.auth.signInWithPassword({
+      const { data: authData, error: authError } = await client.auth.signInWithPassword({
         email: cleanEmail,
         password: password,
       });
-      authData = res.data;
-      authError = res.error;
-
-      // Se falhou e for o e-mail admin oficial, tenta cadastrar automaticamente caso não exista no Auth
-      if ((authError || !authData?.user) && cleanEmail === 'gabriela.nail.beauty@gmail.com') {
-        const signUpRes = await client.auth.signUp({
-          email: cleanEmail,
-          password: password,
-        });
-        if (signUpRes.data?.user) {
-          authData = signUpRes.data;
-          authError = null;
-        } else {
-          // Tenta novamente sign in caso tenha cadastrado recentemente
-          const retryRes = await client.auth.signInWithPassword({
-            email: cleanEmail,
-            password: password,
-          });
-          if (retryRes.data?.user) {
-            authData = retryRes.data;
-            authError = null;
-          }
-        }
-      }
 
       if (authError || !authData?.user) {
-        const errMsg = authError?.message?.toLowerCase() || '';
-        if (errMsg.includes('email not confirmed') || errMsg.includes('unconfirmed') || cleanEmail === 'gabriela.nail.beauty@gmail.com') {
-          // Bypass email confirmation for admin or unconfirmed email
-          localStorage.setItem('admin_bypass', 'true');
-          setCurrentUserEmail(cleanEmail);
-          setIsAuthenticated(true);
-          setPassword('');
-          await reloadFromServer();
-          setIsLoggingIn(false);
-          return;
-        } else if (errMsg.includes('invalid') || errMsg.includes('credentials') || errMsg.includes('grant')) {
+        const rawMsg = authError?.message || '';
+        const errMsg = rawMsg.toLowerCase();
+        const status = (authError as any)?.status;
+
+        if (
+          status === 429 ||
+          errMsg.includes('rate limit') ||
+          errMsg.includes('too many') ||
+          errMsg.includes('over_email_send_rate_limit')
+        ) {
+          setAuthError('Muitas tentativas. Aguarde alguns minutos e tente de novo.');
+        } else if (
+          errMsg.includes('email not confirmed') ||
+          errMsg.includes('unconfirmed')
+        ) {
+          setAuthError('Seu e-mail ainda não foi confirmado. Fale com quem administra o app.');
+        } else if (
+          errMsg.includes('invalid login credentials') ||
+          errMsg.includes('invalid') ||
+          errMsg.includes('credentials') ||
+          errMsg.includes('grant')
+        ) {
           setAuthError('E-mail ou senha incorretos.');
         } else {
           setAuthError(formatSupabaseErrorMessage(authError || 'Erro ao autenticar.'));
         }
+
+        registerFailedAttempt();
         setIsLoggingIn(false);
         return;
       }
@@ -325,45 +341,49 @@ export const AdminArea: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
       const userId = authData.user.id;
       const userEmail = (authData.user.email || cleanEmail).toLowerCase();
 
-      // Valida/cria registro na tabela admins
-      const { data: adminRow } = await client
+      // Valida se a usuária existe na tabela admins por user_id
+      const { data: adminRow, error: adminErr } = await client
         .from('admins')
-        .select('id, user_id, email')
-        .or(`user_id.eq.${userId},email.ilike.${userEmail}`)
+        .select('user_id')
+        .eq('user_id', userId)
         .maybeSingle();
 
-      if (!adminRow) {
-        if (userEmail === 'gabriela.nail.beauty@gmail.com') {
-          await client.from('admins').insert({
-            user_id: userId,
-            email: userEmail,
-            role: 'admin'
-          });
-        } else {
-          await client.auth.signOut();
-          setAuthError('Esta conta não tem acesso ao painel.');
-          setIsLoggingIn(false);
-          return;
-        }
-      } else if (!adminRow.user_id) {
-        try {
-          await client.from('admins').update({ user_id: userId }).eq('id', adminRow.id);
-        } catch {}
+      if (adminErr) {
+        console.error('Erro ao verificar permissão:', formatSupabaseErrorMessage(adminErr));
+        await client.auth.signOut();
+        setAuthError('Não foi possível verificar a permissão. Tente novamente.');
+        registerFailedAttempt();
+        setIsLoggingIn(false);
+        return;
       }
 
+      if (!adminRow) {
+        await client.auth.signOut();
+        setAuthError('Esta conta não tem acesso ao painel.');
+        registerFailedAttempt();
+        setIsLoggingIn(false);
+        return;
+      }
+
+      // Sucesso na autenticação e confirmação de privilégio de administrador
+      setFailedAttempts(0);
+      setLockoutSeconds(0);
       setCurrentUserEmail(userEmail);
       setIsAuthenticated(true);
       setPassword('');
       await reloadFromServer();
     } catch (err: any) {
       setAuthError(formatSupabaseErrorMessage(err));
+      registerFailedAttempt();
     } finally {
       setIsLoggingIn(false);
     }
   };
 
   const handleLogout = async () => {
-    localStorage.removeItem('admin_bypass');
+    try {
+      localStorage.removeItem('admin_bypass');
+    } catch {}
     const client = getSupabaseClient();
     if (client) {
       try {
@@ -632,7 +652,7 @@ export const AdminArea: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
             </div>
             <button 
               type="submit" 
-              disabled={isLoggingIn}
+              disabled={isLoggingIn || lockoutSeconds > 0}
               className="w-full bg-[#2A1E18] text-white py-3.5 rounded-full text-xs uppercase tracking-wider font-semibold hover:bg-[#433128] transition-colors shadow-sm mt-2 disabled:opacity-60 flex items-center justify-center gap-2"
             >
               {isLoggingIn ? (
@@ -640,6 +660,8 @@ export const AdminArea: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
                   <RefreshCw className="w-4 h-4 animate-spin text-[#C5A88E]" />
                   <span>Autenticando...</span>
                 </>
+              ) : lockoutSeconds > 0 ? (
+                <span>Aguarde {lockoutSeconds}s para tentar novamente</span>
               ) : (
                 'Acessar Painel'
               )}

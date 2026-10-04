@@ -61,13 +61,12 @@ export const ServiceGalleryPage: React.FC<ServiceGalleryPageProps> = ({ onBack }
       </button>
 
       <div className="relative z-10 pb-20 pt-6">
-        <div className="max-w-2xl mx-auto px-6 text-center mb-10">
-          <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-[#8C6B4F] block mb-1">
-            {expData.subtitle}
-          </span>
-          <h2 className="font-serif text-3xl sm:text-4xl text-[#201510] font-bold">
-            {expData.title}
-          </h2>
+        <div className="max-w-2xl mx-auto px-6 flex justify-center items-center mb-8 pt-2">
+          <img 
+            src="/logo_gabi_header.png" 
+            alt="Gabriela Santos" 
+            className="h-8 sm:h-10 md:h-11 w-auto object-contain select-none" 
+          />
         </div>
 
         {/* Image Gallery em toda a extensão horizontal da tela */}

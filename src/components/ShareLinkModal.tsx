@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Copy, Check, Share2, QrCode, Download, ExternalLink } from 'lucide-react';
+import { X, Copy, Check, MessageCircle, Share2, Instagram, QrCode, Download, ExternalLink, Send } from 'lucide-react';
 import { useDeviceBackButton } from '../hooks/useDeviceBackButton';
 import { getPublicClientUrl } from '../utils';
 
@@ -17,14 +17,18 @@ export const ShareLinkModal: React.FC<ShareLinkModalProps> = ({
   useDeviceBackButton(isOpen, onClose);
 
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedBio, setCopiedBio] = useState(false);
   const [showQrCode, setShowQrCode] = useState(false);
 
   if (!isOpen) return null;
 
+  // Determina a URL pública oficial e atualizada para as clientes
   const clientUrl = getPublicClientUrl(publicUrl);
   const qrCodeImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&margin=15&format=png&data=${encodeURIComponent(clientUrl)}`;
 
   const defaultMessage = `Olá! ✨ Agende seu momento exclusivo na *Gabriela Santos - Nail & Beauty* de forma rápida e prática pelo nosso aplicativo online:\n\n💅 Procedimentos de Alongamento, Manutenção, Esmaltação em Gel e Cuidados Especiais.\n\n📲 Acesse e agende seu horário:\n👉 ${clientUrl}`;
+
+  const bioText = `💅 Gabriela Santos | Nail & Beauty\n✨ Agende seu horário online:\n👇 ${clientUrl}`;
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(clientUrl);
@@ -32,8 +36,19 @@ export const ShareLinkModal: React.FC<ShareLinkModalProps> = ({
     setTimeout(() => setCopiedLink(false), 2500);
   };
 
-  const handleOpenExternalPWA = () => {
+  const handleCopyBio = () => {
+    navigator.clipboard.writeText(bioText);
+    setCopiedBio(true);
+    setTimeout(() => setCopiedBio(false), 2500);
+  };
+
+  const handleOpenLink = () => {
     window.open(clientUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleSendWhatsapp = () => {
+    const encoded = encodeURIComponent(defaultMessage);
+    window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank', 'noopener,noreferrer');
   };
 
   const handleNativeShare = async () => {
@@ -45,10 +60,10 @@ export const ShareLinkModal: React.FC<ShareLinkModalProps> = ({
           url: clientUrl,
         });
       } catch {
-        handleCopyLink();
+        // Se o usuário cancelar ou falhar, abre no WhatsApp
       }
     } else {
-      handleCopyLink();
+      handleSendWhatsapp();
     }
   };
 
@@ -69,6 +84,8 @@ export const ShareLinkModal: React.FC<ShareLinkModalProps> = ({
     }
   };
 
+  const hasNativeShare = typeof navigator !== 'undefined' && 'share' in navigator;
+
   return (
     <div 
       className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
@@ -81,7 +98,7 @@ export const ShareLinkModal: React.FC<ShareLinkModalProps> = ({
         {/* Fechar */}
         <button 
           onClick={onClose}
-          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 hover:text-stone-800 flex items-center justify-center transition-colors cursor-pointer"
+          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 hover:text-stone-800 flex items-center justify-center transition-colors"
         >
           <X className="w-4 h-4" />
         </button>
@@ -96,7 +113,7 @@ export const ShareLinkModal: React.FC<ShareLinkModalProps> = ({
               Link para Clientes
             </h3>
             <p className="text-xs text-[#6B5A51]">
-              Compartilhe com suas clientes e acesse o app externo
+              Compartilhe com suas clientes para agendamentos online
             </p>
           </div>
         </div>
@@ -104,7 +121,7 @@ export const ShareLinkModal: React.FC<ShareLinkModalProps> = ({
         {/* Caixa do Link */}
         <div className="bg-[#FAF6F2] p-3.5 rounded-2xl border border-[#EDE4DC] space-y-2">
           <label className="text-[10px] uppercase font-bold tracking-wider text-[#8C6B4F] block">
-            Link de Agendamento Oficial (Modo PWA)
+            Link de Agendamento Oficial
           </label>
           <div className="flex items-center gap-2 bg-white px-3 py-2.5 rounded-xl border border-stone-200 text-xs text-[#201510] font-mono break-all select-all">
             <span className="flex-1 truncate">{clientUrl}</span>
@@ -122,56 +139,99 @@ export const ShareLinkModal: React.FC<ShareLinkModalProps> = ({
           </div>
         </div>
 
-        {/* Botões Principais Requisitados */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-          {/* Botão Compartilhar Link */}
-          <button
-            type="button"
-            onClick={handleNativeShare}
-            className="flex items-center justify-center gap-2 py-3 px-3 rounded-2xl bg-[#201510] hover:bg-[#3D2C24] text-white text-xs font-semibold uppercase tracking-wider transition-colors shadow-xs cursor-pointer"
-          >
-            <Share2 className="w-4 h-4 text-[#C5A88E]" />
-            <span>Compartilhar</span>
-          </button>
+        {/* Botões de Ação Rápida */}
+        <div className="space-y-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={handleSendWhatsapp}
+              className="w-full flex items-center justify-center gap-2.5 py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold uppercase tracking-wider transition-colors shadow-xs cursor-pointer"
+            >
+              <MessageCircle className="w-4 h-4" />
+              <span>Enviar no WhatsApp</span>
+            </button>
 
-          {/* Botão Ver QR Code */}
-          <button
-            type="button"
-            onClick={() => setShowQrCode(!showQrCode)}
-            className={`flex items-center justify-center gap-2 py-3 px-3 rounded-2xl text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer border ${
-              showQrCode 
-                ? 'bg-[#201510] text-white border-[#201510]' 
-                : 'bg-stone-100 hover:bg-stone-200 text-stone-800 border-stone-200'
-            }`}
-          >
-            <QrCode className="w-4 h-4 text-[#C5A88E]" />
-            <span>{showQrCode ? 'Ocultar QR' : 'QR Code'}</span>
-          </button>
+            {hasNativeShare ? (
+              <button
+                type="button"
+                onClick={handleNativeShare}
+                className="w-full flex items-center justify-center gap-2.5 py-3 px-4 rounded-2xl bg-[#201510] hover:bg-[#3D2C24] text-white text-xs font-semibold uppercase tracking-wider transition-colors shadow-xs cursor-pointer"
+              >
+                <Share2 className="w-4 h-4 text-[#C5A88E]" />
+                <span>Compartilhar Geral</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleOpenLink}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer border border-stone-200"
+              >
+                <ExternalLink className="w-4 h-4 text-stone-600" />
+                <span>Abrir e Testar</span>
+              </button>
+            )}
+          </div>
 
-          {/* Botão Direcionar ao App PWA Externo */}
-          <button
-            type="button"
-            onClick={handleOpenExternalPWA}
-            className="flex items-center justify-center gap-2 py-3 px-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold uppercase tracking-wider transition-colors shadow-xs cursor-pointer"
-            title="Abrir o aplicativo no modo PWA externo"
-          >
-            <ExternalLink className="w-4 h-4" />
-            <span>Abrir App PWA</span>
-          </button>
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={handleCopyBio}
+              className="flex flex-col sm:flex-row items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-[11px] sm:text-xs font-medium transition-colors cursor-pointer border border-stone-200/70"
+              title="Copiar texto formatado para a Bio do Instagram"
+            >
+              <Instagram className="w-3.5 h-3.5 text-pink-600" />
+              <span>{copiedBio ? 'Copiado!' : 'Bio Insta'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowQrCode(!showQrCode)}
+              className={`flex flex-col sm:flex-row items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-[11px] sm:text-xs font-medium transition-colors cursor-pointer border ${
+                showQrCode 
+                  ? 'bg-[#201510] text-white border-[#201510]' 
+                  : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border-stone-200/70'
+              }`}
+            >
+              <QrCode className="w-3.5 h-3.5 text-[#C5A88E]" />
+              <span>{showQrCode ? 'Ocultar QR' : 'Ver QR Code'}</span>
+            </button>
+
+            {hasNativeShare ? (
+              <button
+                type="button"
+                onClick={handleOpenLink}
+                className="flex flex-col sm:flex-row items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-[11px] sm:text-xs font-medium transition-colors cursor-pointer border border-stone-200/70"
+                title="Abrir a tela da cliente para testar"
+              >
+                <ExternalLink className="w-3.5 h-3.5 text-stone-600" />
+                <span>Testar Link</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="flex flex-col sm:flex-row items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-[11px] sm:text-xs font-medium transition-colors cursor-pointer border border-stone-200/70"
+                title="Copiar link"
+              >
+                <Copy className="w-3.5 h-3.5 text-stone-600" />
+                <span>{copiedLink ? 'Copiado!' : 'Copiar'}</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Exibição do QR Code */}
         {showQrCode && (
           <div className="p-4 bg-[#FAF6F2] rounded-2xl border border-[#E8DDD2] text-center space-y-3 animate-in fade-in duration-150">
             <div className="flex items-center justify-between text-xs font-medium text-[#201510]">
-              <span className="font-semibold">QR Code de Agendamento PWA</span>
+              <span className="font-semibold">QR Code de Agendamento</span>
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-100 text-emerald-800">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                Ativo
+                Atualizado & Ativo
               </span>
             </div>
             
-            <div className="w-44 h-44 mx-auto bg-white p-3 rounded-2xl border border-stone-200 shadow-sm flex items-center justify-center">
+            <div className="w-48 h-48 mx-auto bg-white p-3 rounded-2xl border border-stone-200 shadow-sm flex items-center justify-center">
               <img 
                 src={qrCodeImageUrl}
                 alt="QR Code de Agendamento Gabriela Nail & Beauty"
@@ -180,7 +240,7 @@ export const ShareLinkModal: React.FC<ShareLinkModalProps> = ({
             </div>
             
             <p className="text-[11px] text-[#6B5A51]">
-              Aponte a câmera para abrir o aplicativo no celular em modo PWA.
+              Aponte a câmera do celular ou imprima para colocar no balcão e cartões de visita.
             </p>
 
             <div className="flex items-center justify-center gap-2 pt-1">

@@ -94,10 +94,10 @@ export const defaultCatalogContent: CatalogContentMap = {
     title: 'Viva Esta Experiência',
     subtitle: 'Galeria do Espaço Gabriela Santos',
     images: [
-      { id: '1', url: '/gallery/nail_salon.jpg', caption: 'Nosso espaço aconchegante' },
-      { id: '2', url: '/gallery/nail_art_1.jpg', caption: 'Detalhes em nail art' },
-      { id: '3', url: '/gallery/nail_french.jpg', caption: 'Francesinha clássica' },
-      { id: '4', url: '/gallery/nail_almond.jpg', caption: 'Formato amendoado' }
+      { id: '1', url: '', caption: 'Nosso espaço aconchegante' },
+      { id: '2', url: '', caption: 'Detalhes em nail art' },
+      { id: '3', url: '', caption: 'Francesinha clássica' },
+      { id: '4', url: '', caption: 'Formato amendoado' }
     ]
   },
   sobreMim: {
@@ -374,10 +374,10 @@ export interface StoreContextType {
   services: Service[];
   setServices: (services: Service[]) => void;
   categories: ServiceCategory[];
-  setCategories: (categories: ServiceCategory[]) => void;
-  addCategory: (cat: Omit<ServiceCategory, 'id'> & { id?: string }) => void;
-  updateCategory: (id: string, updates: Partial<ServiceCategory>) => void;
-  deleteCategory: (id: string) => void;
+  setCategories: (categories: ServiceCategory[]) => Promise<{ success: boolean; error?: string }>;
+  addCategory: (cat: Omit<ServiceCategory, 'id'> & { id?: string }) => Promise<{ success: boolean; error?: string }>;
+  updateCategory: (id: string, updates: Partial<ServiceCategory>) => Promise<{ success: boolean; error?: string }>;
+  deleteCategory: (id: string) => Promise<{ success: boolean; error?: string }>;
   appointments: Appointment[];
   setAppointments: (apps: Appointment[]) => void;
   blocks: Block[];
@@ -391,7 +391,7 @@ export interface StoreContextType {
   adminCheckError: string | null;
   appointmentsError: string | null;
   catalogContent: CatalogContentMap;
-  setCatalogContent: (c: CatalogContentMap) => void;
+  setCatalogContent: (c: CatalogContentMap) => Promise<{ success: boolean; error?: string }>;
   clientProfiles: Record<string, ClientProfile>;
   deletedClientPhones: string[];
   saveClientProfile: (phone: string, profile: Partial<ClientProfile>) => Promise<AppointmentResult>;
@@ -521,9 +521,15 @@ const sanitizeServices = (loadedServices: Service[]): Service[] => {
       return imgPath;
     };
 
-    let rawImages = Array.isArray(s.images) && s.images.length > 0
-      ? s.images 
-      : (def?.images || (s.imageUrl ? [s.imageUrl] : [defaultImg]));
+    // Prioriza imagens customizadas (base64 ou URL) enviadas pelo usuário
+    let rawImages: string[] = [];
+    if (Array.isArray(s.images) && s.images.length > 0) {
+      rawImages = s.images;
+    } else if (s.imageUrl && typeof s.imageUrl === 'string' && s.imageUrl.trim().length > 0) {
+      rawImages = [s.imageUrl];
+    } else {
+      rawImages = def?.images || [defaultImg];
+    }
 
     let images = rawImages
       .filter((img): img is string => typeof img === 'string' && img.trim().length > 0)
@@ -535,12 +541,15 @@ const sanitizeServices = (loadedServices: Service[]): Service[] => {
 
     if (images.length === 0) images = def?.images || [defaultImg];
 
-    let finalImageUrl = normalizeImgPath(s.imageUrl);
-    if (def && def.imageUrl !== '/aplicacao_1.webp' && finalImageUrl === '/aplicacao_1.webp') {
+    let finalImageUrl = (s.imageUrl && s.imageUrl.trim().length > 0)
+      ? normalizeImgPath(s.imageUrl)
+      : (images[0] || defaultImg);
+
+    if (def && def.imageUrl !== '/aplicacao_1.webp' && finalImageUrl === '/aplicacao_1.webp' && !s.imageUrl?.startsWith('data:image')) {
       finalImageUrl = def.imageUrl;
     }
     if (!finalImageUrl) {
-      finalImageUrl = def?.imageUrl || images[0] || defaultImg;
+      finalImageUrl = images[0] || def?.imageUrl || defaultImg;
     }
 
     // Remove complementos de alongamento que possam ter entrado por engano na Manutenção
@@ -750,6 +759,8 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
   // Canais ativos mantidos abertos para sincronização imediata
   const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
   const realtimeSyncChannelRef = useRef<any>(null);
+  const writeLockRef = useRef<number>(0);
+  const pullFromSupabaseRef = useRef<((isSilent?: boolean) => Promise<{ success: boolean; message: string }>) | null>(null);
 
   // Dispara sincronização imediata (sub-50ms) entre todas as abas e todos os dispositivos conectados
   const broadcastStateChange = useCallback((payload: {
@@ -841,43 +852,14 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
     cc?: CatalogContentMap
   ) => {
     const current = stateRef.current;
-
-    const currentComplementsCount = (current.services || []).reduce((acc, sv) => acc + (sv.complements?.length || 0), 0);
-    const incomingComplementsCount = (s || []).reduce((acc, sv) => acc + (sv.complements?.length || 0), 0);
-    let safeServices = s;
-    if (incomingComplementsCount < currentComplementsCount && currentComplementsCount > 0) {
-      safeServices = s.map(serv => {
-        if (!serv.complements || serv.complements.length === 0) {
-          const match = current.services.find(ls => ls.id === serv.id || (ls.name && serv.name && ls.name.trim().toLowerCase() === serv.name.trim().toLowerCase()));
-          if (match?.complements && match.complements.length > 0) {
-            return {
-              ...serv,
-              complements: match.complements,
-              images: (serv.images?.length || 0) < (match.images?.length || 0) ? match.images : serv.images
-            };
-          }
-        }
-        return serv;
-      });
-    }
-
-    const sanitizedServices = sanitizeServices(safeServices);
     const finalCategories = cats !== undefined ? cats : current.categories;
     const finalCatalog = cc !== undefined ? cc : current.catalogContent;
 
     const payload = { 
-      services: sanitizedServices, 
       categories: finalCategories,
       config: c, 
       catalogContent: finalCatalog
     };
-
-    broadcastStateChange({
-      services: sanitizedServices,
-      categories: finalCategories,
-      catalogContent: finalCatalog,
-      config: c
-    });
 
     const client = getSupabaseClient();
     if (!client) {
@@ -889,6 +871,8 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
 
     setIsSupabaseConfigured(true);
     setIsSyncing(true);
+    writeLockRef.current += 1;
+    let pushSuccess = false;
 
     try {
       const { error } = await client.from('app_state').upsert({
@@ -915,24 +899,31 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
       setLastSyncedAt(new Date());
 
       broadcastStateChange({
-        services: sanitizedServices,
         categories: finalCategories,
         catalogContent: finalCatalog,
         config: c
       });
 
+      pushSuccess = true;
       return { success: true, message: 'Dados sincronizados com o Supabase com sucesso!' };
     } catch (err: any) {
       setSupabaseStatus('error');
       setIsSupabaseConnected(false);
       return { success: false, message: `Erro de rede no Supabase: ${err?.message || 'Falha de conexão'}` };
     } finally {
+      writeLockRef.current = Math.max(0, writeLockRef.current - 1);
       setIsSyncing(false);
+      if (writeLockRef.current === 0) {
+        pullFromSupabaseRef.current?.(true);
+      }
     }
   }, [broadcastStateChange]);
 
   // Carrega do Supabase
   const pullFromSupabase = useCallback(async (isSilent = false) => {
+    if (writeLockRef.current > 0) {
+      return { success: true, message: 'ignorado' };
+    }
     const client = getSupabaseClient();
     if (!client) {
       const err = 'Supabase não configurado: VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY não encontradas.';
@@ -1122,6 +1113,8 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
       }
     }
   }, [saveToLocalStorage]);
+
+  pullFromSupabaseRef.current = pullFromSupabase;
 
   // Inicialização e escuta Realtime Ultrarrápida / Sincronização Automática
   useEffect(() => {
@@ -1836,9 +1829,9 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
     }
   };
 
-  const addCategory = (cat: Omit<ServiceCategory, 'id'> & { id?: string }) => {
+  const addCategory = async (cat: Omit<ServiceCategory, 'id'> & { id?: string }): Promise<{ success: boolean; error?: string }> => {
     const rawLabel = cat.label.trim();
-    if (!rawLabel) return;
+    if (!rawLabel) return { success: false, error: 'Nome da categoria inválido' };
     const cleanId = cat.id?.trim() || `cat-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
     const newCat: ServiceCategory = {
       id: cleanId,
@@ -1847,48 +1840,94 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
     };
     const current = stateRef.current;
     const updated = [...current.categories, newCat];
+
+    const pushRes = await pushToSupabase(current.services, current.config, updated, current.catalogContent);
+    if (!pushRes.success) {
+      return { success: false, error: pushRes.message };
+    }
+
     setCategoriesState(updated);
     saveToLocalStorage(current.services, current.config, updated, current.catalogContent);
     broadcastStateChange({ categories: updated });
-    pushToSupabase(current.services, current.config, updated, current.catalogContent);
+    return { success: true };
   };
 
-  const updateCategory = (id: string, updates: Partial<ServiceCategory>) => {
+  const updateCategory = async (id: string, updates: Partial<ServiceCategory>): Promise<{ success: boolean; error?: string }> => {
     const current = stateRef.current;
     const updated = current.categories.map(c => (c.id === id ? { ...c, ...updates, label: updates.label !== undefined ? updates.label.trim() : c.label } : c));
+
+    const pushRes = await pushToSupabase(current.services, current.config, updated, current.catalogContent);
+    if (!pushRes.success) {
+      return { success: false, error: pushRes.message };
+    }
+
     setCategoriesState(updated);
     saveToLocalStorage(current.services, current.config, updated, current.catalogContent);
     broadcastStateChange({ categories: updated });
-    pushToSupabase(current.services, current.config, updated, current.catalogContent);
+    return { success: true };
   };
 
-  const deleteCategory = (id: string) => {
+  const deleteCategory = async (id: string): Promise<{ success: boolean; error?: string }> => {
     const current = stateRef.current;
+    if (current.categories.length <= 1) {
+      return { success: false, error: 'É necessário manter pelo menos uma categoria cadastrada.' };
+    }
+
     const updated = current.categories.filter(c => c.id !== id);
     const fallbackCat = updated[0]?.id || 'outros';
     const updatedServices = current.services.map(s => (s.category === id ? { ...s, category: fallbackCat } : s));
+
+    const affectedServices = current.services.filter(s => s.category === id);
+    const client = getSupabaseClient();
+    if (client && affectedServices.length > 0) {
+      const { error: updErr } = await client
+        .from('services')
+        .update({ category: fallbackCat })
+        .in('id', affectedServices.map(s => s.id));
+
+      if (updErr) {
+        const errMsg = `Erro ao reatribuir serviços: ${updErr.message}`;
+        console.error(errMsg);
+        return { success: false, error: errMsg };
+      }
+    }
+
+    const pushRes = await pushToSupabase(updatedServices, current.config, updated, current.catalogContent);
+    if (!pushRes.success) {
+      return { success: false, error: pushRes.message };
+    }
+
     setServicesState(updatedServices);
     setCategoriesState(updated);
-
     saveToLocalStorage(updatedServices, current.config, updated, current.catalogContent);
     broadcastStateChange({ services: updatedServices, categories: updated });
-    pushToSupabase(updatedServices, current.config, updated, current.catalogContent);
+    return { success: true };
   };
 
-  const setCategories = (cats: ServiceCategory[]) => {
+  const setCategories = async (cats: ServiceCategory[]): Promise<{ success: boolean; error?: string }> => {
     const current = stateRef.current;
+    const pushRes = await pushToSupabase(current.services, current.config, cats, current.catalogContent);
+    if (!pushRes.success) {
+      return { success: false, error: pushRes.message };
+    }
+
     setCategoriesState(cats);
     saveToLocalStorage(current.services, current.config, cats, current.catalogContent);
     broadcastStateChange({ categories: cats });
-    pushToSupabase(current.services, current.config, cats, current.catalogContent);
+    return { success: true };
   };
 
-  const setCatalogContent = (cc: CatalogContentMap) => {
+  const setCatalogContent = async (cc: CatalogContentMap): Promise<{ success: boolean; error?: string }> => {
     const current = stateRef.current;
+    const pushRes = await pushToSupabase(current.services, current.config, current.categories, cc);
+    if (!pushRes.success) {
+      return { success: false, error: pushRes.message };
+    }
+
     setCatalogContentState(cc);
     saveToLocalStorage(current.services, current.config, current.categories, cc);
     broadcastStateChange({ catalogContent: cc });
-    pushToSupabase(current.services, current.config, current.categories, cc);
+    return { success: true };
   };
 
   const syncWithSupabase = async () => {

@@ -91,13 +91,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </button>
             <button 
               type="button" 
-              onClick={onOpenMenu}
-              className="hover:text-[#8C6B4F] transition-colors cursor-pointer py-1 uppercase"
-            >
-              MENU E CATÁLOGO
-            </button>
-            <button 
-              type="button" 
               onClick={onAdminClick}
               className="text-[#8C6B4F] hover:text-[#201510] transition-colors cursor-pointer py-1 uppercase"
             >
@@ -105,17 +98,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </button>
           </nav>
 
-          {/* Ações da Direita: CTA Agendar em desktop + Menu Hambúrguer */}
+          {/* Ações da Direita: Menu Hambúrguer */}
           <div className="flex items-center gap-2.5 sm:gap-3 z-10">
-            <button
-              type="button"
-              onClick={onStart}
-              className="hidden md:flex items-center gap-2 bg-[#201510] text-white hover:bg-[#38261E] px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all shadow-xs cursor-pointer active:scale-95"
-            >
-              <span>AGENDAR</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-
             <button 
               onClick={onOpenMenu} 
               title="Menu de opções"

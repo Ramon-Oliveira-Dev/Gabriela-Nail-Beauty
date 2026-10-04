@@ -55,9 +55,12 @@ export const AboutMePage: React.FC<AboutMePageProps> = ({ onBack }) => {
         >
           <ArrowLeft className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
         </button>
-        <div className="flex items-center gap-1.5 text-[#8C6B4F] text-[11px] sm:text-xs font-bold tracking-[0.2em] uppercase">
-          <Sparkles className="w-3.5 h-3.5 text-[#C5A88E]" />
-          <span>Sobre Mim</span>
+        <div className="flex items-center justify-center">
+          <img 
+            src="/logo_gabi_header.png" 
+            alt="Gabriela Santos" 
+            className="h-7 sm:h-8 md:h-9 w-auto object-contain select-none" 
+          />
         </div>
         <div className="w-9 sm:w-10" />
       </div>
@@ -104,17 +107,6 @@ export const AboutMePage: React.FC<AboutMePageProps> = ({ onBack }) => {
               {aboutData.bioParagraphs?.map((p, idx) => (
                 <p key={idx}>{p}</p>
               ))}
-              
-              {aboutData.stats && aboutData.stats.length > 0 && (
-                <div className="grid grid-cols-3 gap-3 pt-3">
-                  {aboutData.stats.map((st, i) => (
-                    <div key={i} className="p-3 rounded-2xl bg-[#F8F2EC] border border-[#EADDCE] text-center">
-                      <p className="font-serif text-lg font-bold text-[#201510]">{st.value}</p>
-                      <p className="text-[10px] uppercase font-bold tracking-wider text-[#8C6B4F] mt-0.5">{st.label}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -144,17 +136,6 @@ export const AboutMePage: React.FC<AboutMePageProps> = ({ onBack }) => {
               <p key={idx}>{p}</p>
             ))}
           </div>
-
-          {aboutData.stats && aboutData.stats.length > 0 && (
-            <div className="grid grid-cols-3 gap-2 w-full pt-1">
-              {aboutData.stats.map((st, i) => (
-                <div key={i} className="p-2 rounded-xl bg-[#F8F2EC] border border-[#EADDCE] text-center">
-                  <p className="font-serif text-sm font-bold text-[#201510]">{st.value}</p>
-                  <p className="text-[9px] uppercase font-bold text-[#8C6B4F]">{st.label}</p>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
       </div>

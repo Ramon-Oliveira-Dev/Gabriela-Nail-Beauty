@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Appointment, Block, Service, WorkingDay } from '../types';
 import { formatDate, formatCurrency, formatDuration } from '../utils';
 import { 
@@ -52,6 +52,31 @@ export const AgendaMonthlyView: React.FC<AgendaMonthlyViewProps> = ({
   const [currentYear, setCurrentYear] = useState(selectedY || new Date().getFullYear());
   const [currentMonth, setCurrentMonth] = useState(selectedM ? selectedM - 1 : new Date().getMonth()); // 0-11
 
+  const monthListRef = useRef<HTMLDivElement>(null);
+  const isInitialMountRef = useRef(true);
+
+  // Efeito para centralizar o botão do mês selecionado na faixa horizontal
+  useEffect(() => {
+    const behavior: ScrollBehavior = isInitialMountRef.current ? 'auto' : 'smooth';
+    isInitialMountRef.current = false;
+
+    const doScroll = () => {
+      const container = monthListRef.current;
+      if (!container) return;
+      const botao = container.querySelector<HTMLButtonElement>(`[data-month="${currentMonth}"]`);
+      if (botao) {
+        container.scrollTo({
+          left: botao.offsetLeft - container.clientWidth / 2 + botao.clientWidth / 2,
+          behavior,
+        });
+      }
+    };
+
+    doScroll();
+    const timer = setTimeout(doScroll, 50);
+    return () => clearTimeout(timer);
+  }, [currentMonth, currentYear]);
+
   // Navegação de mês
   const handlePrevMonth = () => {
     if (currentMonth === 0) {
@@ -73,9 +98,22 @@ export const AgendaMonthlyView: React.FC<AgendaMonthlyViewProps> = ({
 
   const handleCurrentMonth = () => {
     const now = new Date();
-    setCurrentYear(now.getFullYear());
-    setCurrentMonth(now.getMonth());
+    const nowYear = now.getFullYear();
+    const nowMonth = now.getMonth();
+    setCurrentYear(nowYear);
+    setCurrentMonth(nowMonth);
     onSelectDate(todayStr);
+
+    const container = monthListRef.current;
+    if (container) {
+      const botao = container.querySelector<HTMLButtonElement>(`[data-month="${nowMonth}"]`);
+      if (botao) {
+        container.scrollTo({
+          left: botao.offsetLeft - container.clientWidth / 2 + botao.clientWidth / 2,
+          behavior: 'smooth',
+        });
+      }
+    }
   };
 
   const monthName = useMemo(() => {
@@ -206,13 +244,17 @@ export const AgendaMonthlyView: React.FC<AgendaMonthlyViewProps> = ({
         </button>
 
         {/* Lista Horizontal de Meses em Pílulas */}
-        <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto py-1 scrollbar-none">
+        <div 
+          ref={monthListRef}
+          className="flex items-center gap-1 sm:gap-2 overflow-x-auto py-1 scrollbar-none"
+        >
           {MONTH_NAMES_SHORT.map((mShort, idx) => {
             const isSelected = idx === currentMonth;
             return (
               <button
                 key={mShort}
                 type="button"
+                data-month={idx}
                 onClick={() => {
                   setCurrentMonth(idx);
                   const newDateStr = `${currentYear}-${String(idx + 1).padStart(2, '0')}-01`;

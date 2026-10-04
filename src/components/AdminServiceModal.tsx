@@ -7,7 +7,7 @@ import {
   formatNumberToCurrencyString, 
   parseCurrencyStringToNumber 
 } from '../utils';
-import { X, Upload, Trash2, Image as ImageIcon, Sparkles, Check, Plus, Edit2, Settings2, FolderPlus } from 'lucide-react';
+import { X, Upload, Trash2, Image as ImageIcon, Sparkles, Check, Plus, Edit2, Settings2 } from 'lucide-react';
 
 interface AdminServiceModalProps {
   isOpen: boolean;
@@ -16,194 +16,6 @@ interface AdminServiceModalProps {
   serviceToEdit?: Service | null;
 }
 
-interface ComplementImageManagerProps {
-  images: string[];
-  onChange: (images: string[]) => void;
-}
-
-const ComplementImageManager: React.FC<ComplementImageManagerProps> = ({
-  images,
-  onChange,
-}) => {
-  const [isUrlMode, setIsUrlMode] = useState(false);
-  const [customUrl, setCustomUrl] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      setError('Por favor, selecione um arquivo de imagem válido (JPG, PNG, WebP).');
-      return;
-    }
-
-    setError(null);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 600;
-        const MAX_HEIGHT = 600;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > MAX_WIDTH) {
-            height *= MAX_WIDTH / width;
-            width = MAX_WIDTH;
-          }
-        } else {
-          if (height > MAX_HEIGHT) {
-            width *= MAX_HEIGHT / height;
-            height = MAX_HEIGHT;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
-          onChange([...images, compressedDataUrl]);
-        }
-      };
-      img.src = event.target?.result as string;
-    };
-    reader.readAsDataURL(file);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  const handleAddUrl = () => {
-    if (customUrl.trim()) {
-      onChange([...images, customUrl.trim()]);
-      setCustomUrl('');
-      setIsUrlMode(false);
-    }
-  };
-
-  const handleRemoveImage = (idxToRemove: number) => {
-    onChange(images.filter((_, idx) => idx !== idxToRemove));
-  };
-
-  return (
-    <div className="p-3 bg-[#FAF6F2]/90 rounded-xl border border-[#EADDCF] space-y-2.5">
-      <div className="flex items-center justify-between">
-        <label className="text-[11px] uppercase tracking-wider font-semibold text-[#8C6B4F] flex items-center gap-1.5">
-          <ImageIcon className="w-3.5 h-3.5 text-[#8C6B4F]" />
-          Fotos do Procedimento ({images.length})
-        </label>
-        <span className="text-[10.5px] text-[#76685F]">Opcional</span>
-      </div>
-
-      {/* Preview das Fotos da Galeria */}
-      <div className="flex flex-wrap gap-2.5">
-        {images.map((url, idx) => (
-          <div
-            key={idx}
-            className="relative w-16 h-16 rounded-lg overflow-hidden border border-[#D9CCC1] shadow-2xs group bg-white"
-          >
-            <img
-              src={url}
-              alt={`Foto ${idx + 1}`}
-              className="w-full h-full object-cover"
-            />
-            <button
-              type="button"
-              onClick={() => handleRemoveImage(idx)}
-              className="absolute top-1 right-1 w-5 h-5 bg-white/95 backdrop-blur-xs rounded-full flex items-center justify-center text-red-500 shadow-2xs hover:bg-red-50 hover:text-red-600 transition-colors z-10 cursor-pointer"
-              title="Remover Foto"
-            >
-              <Trash2 className="w-3 h-3" />
-            </button>
-            {idx === 0 && (
-              <div className="absolute bottom-0 inset-x-0 bg-[#8C6B4F]/90 text-white text-[8px] text-center font-bold py-0.5">
-                Capa
-              </div>
-            )}
-          </div>
-        ))}
-
-        {images.length === 0 && (
-          <div className="w-16 h-16 rounded-lg border border-dashed border-[#D9CCC1] bg-white flex flex-col items-center justify-center text-stone-400">
-            <ImageIcon className="w-5 h-5 mb-0.5 text-stone-300" />
-            <span className="text-[8.5px] font-medium text-center">Sem foto</span>
-          </div>
-        )}
-      </div>
-
-      {/* Botões de Ação para Imagem */}
-      <div className="flex flex-wrap items-center gap-2 pt-0.5">
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileUpload}
-          accept="image/*"
-          className="hidden"
-        />
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="px-2.5 py-1.5 rounded-lg bg-white border border-[#D9CCC1] text-[#201510] text-[11px] font-semibold hover:bg-stone-50 transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
-        >
-          <Upload className="w-3 h-3 text-[#8C6B4F]" />
-          Adicionar
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setIsUrlMode(!isUrlMode)}
-          className="px-2.5 py-1.5 rounded-lg bg-white border border-[#D9CCC1] text-stone-600 text-[11px] font-medium hover:bg-stone-50 transition-colors cursor-pointer"
-        >
-          Link (URL)
-        </button>
-
-        {images.length > 0 && (
-          <button
-            type="button"
-            onClick={() => onChange([])}
-            className="px-2 py-1.5 rounded-lg bg-red-50 border border-red-100 text-red-600 text-[11px] font-medium hover:bg-red-100 transition-colors flex items-center gap-1 ml-auto cursor-pointer"
-          >
-            <Trash2 className="w-3 h-3" />
-            Limpar
-          </button>
-        )}
-      </div>
-
-      {error && (
-        <p className="text-[11px] text-red-600 bg-red-50 p-2 rounded-lg border border-red-200">
-          {error}
-        </p>
-      )}
-
-      {/* Inserir URL manual */}
-      {isUrlMode && (
-        <div className="flex gap-2 pt-1">
-          <input
-            type="url"
-            placeholder="https://exemplo.com/foto-nailart.jpg"
-            value={customUrl}
-            onChange={(e) => setCustomUrl(e.target.value)}
-            className="flex-1 px-3 py-1.5 rounded-lg border border-stone-200 text-xs bg-white focus:outline-none focus:border-[#8C6B4F]"
-          />
-          <button
-            type="button"
-            onClick={handleAddUrl}
-            className="px-3 py-1.5 rounded-lg bg-[#201510] text-white text-xs font-semibold hover:bg-[#3d2a20] transition-colors cursor-pointer"
-          >
-            Adicionar
-          </button>
-        </div>
-      )}
-    </div>
-  );
-};
-
 export const AdminServiceModal: React.FC<AdminServiceModalProps> = ({
   isOpen,
   onClose,
@@ -211,44 +23,51 @@ export const AdminServiceModal: React.FC<AdminServiceModalProps> = ({
   serviceToEdit,
 }) => {
   const { categories, addCategory, updateCategory, deleteCategory } = useStore();
+  const categoriesRef = useRef(categories);
+  categoriesRef.current = categories;
+
   const [name, setName] = useState('');
   const [category, setCategory] = useState<string>('aplicacao');
   const [durationMinutes, setDurationMinutes] = useState(60);
   const [price, setPrice] = useState(80);
   const [displayPrice, setDisplayPrice] = useState('80,00');
   const [description, setDescription] = useState('');
-  const [imagesList, setImagesList] = useState<string[]>([]);
-  const [isUrlMode, setIsUrlMode] = useState(false);
-  const [customUrlInput, setCustomUrlInput] = useState('');
+  const [image, setImage] = useState<string>('');
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   
-  // Estados para gerenciamento de categorias do menu da cliente
+  // Estados para gerenciamento de categorias do menu da cliente no botão Gerenciar
   const [isManagingCategories, setIsManagingCategories] = useState(false);
-  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [newCategoryLabel, setNewCategoryLabel] = useState('');
-  const [newCategoryDescription, setNewCategoryDescription] = useState('');
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [editCategoryLabel, setEditCategoryLabel] = useState('');
-  const [editCategoryDescription, setEditCategoryDescription] = useState('');
 
   const [complementsList, setComplementsList] = useState<ComplementaryService[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const prevIsOpenRef = useRef(false);
 
   useEffect(() => {
+    if (!isOpen) {
+      prevIsOpenRef.current = false;
+      return;
+    }
+
+    const wasOpen = prevIsOpenRef.current;
+    prevIsOpenRef.current = true;
+
     if (serviceToEdit) {
       setName(serviceToEdit.name || '');
-      setCategory(serviceToEdit.category || (categories[0]?.id || 'outros'));
+      setCategory(serviceToEdit.category || (categoriesRef.current[0]?.id || 'outros'));
       setDurationMinutes(serviceToEdit.durationMinutes || 60);
       setPrice(serviceToEdit.price || 0);
       setDisplayPrice(formatNumberToCurrencyString(serviceToEdit.price || 0));
       setDescription(serviceToEdit.description || '');
       
-      const editImages = serviceToEdit.images?.length 
-        ? serviceToEdit.images 
-        : (serviceToEdit.imageUrl ? [serviceToEdit.imageUrl] : []);
-      setImagesList(editImages);
+      const imgValue = serviceToEdit.imageUrl || serviceToEdit.images?.[0] || '';
+      setImage(imgValue || '');
       
       const genuineComplements = (serviceToEdit.complements || [])
         .filter(c => c && typeof c.name === 'string' && c.name.trim().length > 0)
@@ -257,85 +76,149 @@ export const AdminServiceModal: React.FC<AdminServiceModalProps> = ({
           id: c.id ? String(c.id) : `complement-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`
         }));
       setComplementsList(genuineComplements);
-      
-      setCustomUrlInput('');
     } else {
       setName('');
-      setCategory(categories[0]?.id || 'aplicacao');
+      setCategory(categoriesRef.current[0]?.id || 'aplicacao');
       setDurationMinutes(60);
       setPrice(80);
       setDisplayPrice('80,00');
       setDescription('');
-      setImagesList([]);
+      setImage('');
       setComplementsList([]);
-      setCustomUrlInput('');
     }
     setUploadError(null);
-    setIsUrlMode(false);
-    setIsManagingCategories(false);
-    setIsAddingCategory(false);
-    setEditingCategoryId(null);
-  }, [serviceToEdit, isOpen, categories]);
+    setSaveError(null);
+
+    if (!wasOpen) {
+      setIsManagingCategories(false);
+      setConfirmDeleteId(null);
+      setNewCategoryLabel('');
+      setEditingCategoryId(null);
+    }
+  }, [serviceToEdit?.id, isOpen]);
 
   if (!isOpen) return null;
 
-  // Processa upload de imagem local
+  // Processa upload de 1 imagem local para o serviço com compressão automática e suporte amplo
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
+    const isHeic = /\.(heic|heif)$/i.test(file.name) || file.type === 'image/heic' || file.type === 'image/heif';
+    if (isHeic) {
+      setUploadError('Fotos no formato HEIC precisam ser convertidas para JPG antes do envio.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    const isLikelyImage = 
+      (file.type && file.type.toLowerCase().startsWith('image/')) ||
+      /\.(jpe?g|png|webp|gif|bmp|jfif|svg|pjpeg|pjp)$/i.test(file.name) ||
+      file.size > 0;
+
+    if (!isLikelyImage) {
       setUploadError('Por favor, selecione um arquivo de imagem válido (JPG, PNG, WebP).');
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
     setUploadError(null);
+    setSaveError(null);
     const reader = new FileReader();
+
+    reader.onerror = () => {
+      setUploadError('Não foi possível processar esta foto. Use uma imagem JPG ou PNG.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
     reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (!result) {
+        setUploadError('Não foi possível processar esta foto. Use uma imagem JPG ou PNG.');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+
       const img = new Image();
+      img.onerror = () => {
+        setUploadError('Não foi possível processar esta foto. Use uma imagem JPG ou PNG.');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      };
+
       img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 600;
-        const MAX_HEIGHT = 600;
-        let width = img.width;
-        let height = img.height;
+        try {
+          const compressToCanvas = (maxDim: number, quality: number) => {
+            const canvas = document.createElement('canvas');
+            let width = Math.max(1, img.width || 800);
+            let height = Math.max(1, img.height || 800);
 
-        if (width > height) {
-          if (width > MAX_WIDTH) {
-            height *= MAX_WIDTH / width;
-            width = MAX_WIDTH;
-          }
-        } else {
-          if (height > MAX_HEIGHT) {
-            width *= MAX_HEIGHT / height;
-            height = MAX_HEIGHT;
-          }
-        }
+            if (width > height) {
+              if (width > maxDim) {
+                height = Math.round(height * (maxDim / width));
+                width = maxDim;
+              }
+            } else {
+              if (height > maxDim) {
+                width = Math.round(width * (maxDim / height));
+                height = maxDim;
+              }
+            }
 
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
-          setImagesList(prev => [...prev, compressedDataUrl]);
+            canvas.width = Math.max(1, width);
+            canvas.height = Math.max(1, height);
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return null;
+            ctx.drawImage(img, 0, 0, width, height);
+            return canvas.toDataURL('image/jpeg', quality);
+          };
+
+          let compressedDataUrl = compressToCanvas(800, 0.82);
+
+          if (!compressedDataUrl) {
+            setUploadError('Não foi possível processar esta foto. Use uma imagem JPG ou PNG.');
+            return;
+          }
+
+          if (compressedDataUrl.length > 1000000) {
+            const smallerDataUrl = compressToCanvas(600, 0.7);
+            if (smallerDataUrl && smallerDataUrl.length <= 1000000) {
+              compressedDataUrl = smallerDataUrl;
+            } else {
+              setUploadError('Foto muito pesada (mesmo após redução). Escolha uma imagem menor.');
+              return;
+            }
+          }
+
+          setImage(compressedDataUrl);
+        } catch {
+          setUploadError('Não foi possível processar esta foto. Use uma imagem JPG ou PNG.');
+        } finally {
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
         }
       };
-      img.src = event.target?.result as string;
+
+      img.src = result;
     };
+
     reader.readAsDataURL(file);
   };
 
-  const handleApplyCustomUrl = () => {
-    if (customUrlInput.trim()) {
-      setImagesList(prev => [...prev, customUrlInput.trim()]);
-      setIsUrlMode(false);
-      setCustomUrlInput('');
+  const handleAddCategory = async () => {
+    const trimmed = newCategoryLabel.trim();
+    if (!trimmed) return;
+    const customId = `cat-${Date.now()}`;
+    const res = await addCategory({
+      id: customId,
+      label: trimmed,
+    });
+    if (!res.success) {
+      alert(res.error || 'Erro ao adicionar categoria');
+      return;
     }
-  };
-
-  const handleRemoveImage = (indexToRemove: number) => {
-    setImagesList(prev => prev.filter((_, idx) => idx !== indexToRemove));
+    setCategory(customId);
+    setNewCategoryLabel('');
   };
 
   const handleAddComplement = () => {
@@ -362,8 +245,9 @@ export const AdminServiceModal: React.FC<AdminServiceModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSaveError(null);
     if (!name.trim()) {
-      alert('Por favor, informe o nome do procedimento.');
+      setSaveError('Por favor, informe o nome do procedimento.');
       return;
     }
 
@@ -375,7 +259,7 @@ export const AdminServiceModal: React.FC<AdminServiceModalProps> = ({
         description: (c.description || '').trim(),
         price: Number(c.price) || 0,
         durationMinutes: Number(c.durationMinutes) || 15,
-        images: Array.isArray(c.images) ? c.images : []
+        images: []
       }));
 
     setIsSaving(true);
@@ -387,8 +271,8 @@ export const AdminServiceModal: React.FC<AdminServiceModalProps> = ({
           durationMinutes: Number(durationMinutes),
           price: Number(price),
           description: description.trim(),
-          imageUrl: imagesList[0] || undefined,
-          images: imagesList,
+          imageUrl: image || '',
+          images: image ? [image] : [],
           complements: cleanComplements,
         },
         serviceToEdit?.id
@@ -397,7 +281,11 @@ export const AdminServiceModal: React.FC<AdminServiceModalProps> = ({
       // Só fecha a janela após sucesso confirmado (res !== false)
       if (res !== false) {
         onClose();
+      } else {
+        setSaveError('Não foi possível salvar o procedimento. Tente novamente.');
       }
+    } catch (err: any) {
+      setSaveError(err?.message || 'Erro ao salvar procedimento.');
     } finally {
       setIsSaving(false);
     }
@@ -448,240 +336,231 @@ export const AdminServiceModal: React.FC<AdminServiceModalProps> = ({
             />
           </div>
 
-          {/* Categoria do Serviço com Opção de Adicionar, Editar e Remover */}
+          {/* Categoria do Serviço com Opção de Adicionar, Editar e Remover no botão Gerenciar */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="block text-[11px] uppercase tracking-wider font-bold text-stone-600">
                 Categoria para o Menu da Cliente
               </label>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsAddingCategory(prev => !prev);
-                    setIsManagingCategories(false);
-                    setNewCategoryLabel('');
-                    setNewCategoryDescription('');
-                  }}
-                  className="text-[11px] font-semibold text-[#8C6B4F] hover:text-[#201510] flex items-center gap-1 transition-colors cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Nova Categoria</span>
-                </button>
-                <span className="text-stone-300">•</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsManagingCategories(prev => !prev);
-                    setIsAddingCategory(false);
-                  }}
-                  className="text-[11px] font-semibold text-[#76685F] hover:text-[#201510] flex items-center gap-1 transition-colors cursor-pointer"
-                >
-                  <Settings2 className="w-3.5 h-3.5" />
-                  <span>{isManagingCategories ? 'Fechar Gestão' : 'Gerenciar'}</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsManagingCategories(prev => !prev);
+                  setNewCategoryLabel('');
+                  setEditingCategoryId(null);
+                  setConfirmDeleteId(null);
+                }}
+                className={`text-[11px] font-semibold flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                  isManagingCategories 
+                    ? 'bg-[#201510] text-white border-[#201510]' 
+                    : 'text-[#8C6B4F] bg-[#FAF6F2] hover:bg-[#F2EAE1] hover:text-[#201510] border-[#E8DDD2]'
+                }`}
+              >
+                <Settings2 className="w-3.5 h-3.5" />
+                <span>{isManagingCategories ? 'Fechar Gestão' : 'Gerenciar Categorias'}</span>
+              </button>
             </div>
 
-            {/* Formulário Inline: Adicionar Nova Categoria */}
-            {isAddingCategory && (
-              <div className="p-3.5 rounded-2xl bg-[#FAF5F0] border border-[#EADBCC] space-y-2.5 animate-fade-in shadow-2xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-[#201510] flex items-center gap-1.5">
-                    <FolderPlus className="w-3.5 h-3.5 text-[#8C6B4F]" />
-                    Criar Nova Categoria para o Menu
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setIsAddingCategory(false)}
-                    className="text-stone-400 hover:text-stone-700 p-0.5"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-                <div>
-                  <input
-                    type="text"
-                    value={newCategoryLabel}
-                    onChange={(e) => setNewCategoryLabel(e.target.value)}
-                    placeholder="Nome da categoria (ex: Spa dos Pés, Blindagem...)"
-                    className="w-full px-3 py-1.5 rounded-xl border border-stone-200 bg-white text-stone-800 text-xs focus:outline-none focus:border-[#8C6B4F]"
-                  />
-                </div>
-                <div>
-                  <input
-                    type="text"
-                    value={newCategoryDescription}
-                    onChange={(e) => setNewCategoryDescription(e.target.value)}
-                    placeholder="Descrição breve no menu da cliente (opcional)"
-                    className="w-full px-3 py-1.5 rounded-xl border border-stone-200 bg-white text-stone-800 text-xs focus:outline-none focus:border-[#8C6B4F]"
-                  />
-                </div>
-                <div className="flex justify-end gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setIsAddingCategory(false)}
-                    className="px-3 py-1 rounded-lg text-xs font-medium text-stone-600 hover:bg-stone-100"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!newCategoryLabel.trim()) return;
-                      const customId = `cat-${Date.now()}`;
-                      addCategory({
-                        id: customId,
-                        label: newCategoryLabel.trim(),
-                        description: newCategoryDescription.trim() || undefined,
-                      });
-                      setCategory(customId);
-                      setNewCategoryLabel('');
-                      setNewCategoryDescription('');
-                      setIsAddingCategory(false);
-                    }}
-                    className="px-3.5 py-1 rounded-lg bg-[#201510] text-white text-xs font-semibold hover:bg-[#38261E] flex items-center gap-1 shadow-2xs"
-                  >
-                    <Check className="w-3 h-3 text-[#C5A88E]" />
-                    <span>Adicionar Categoria</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Painel Inline: Gerenciar / Editar / Remover Categorias Existentes */}
+            {/* Painel Inline: Gerenciar, Adicionar e Remover Categorias */}
             {isManagingCategories && (
-              <div className="p-3.5 rounded-2xl bg-[#FAF6F2] border border-[#E8DDD2] space-y-2 animate-fade-in shadow-2xs">
-                <div className="flex items-center justify-between pb-1 border-b border-[#EFE7DC]">
-                  <span className="text-xs font-bold text-[#201510]">
-                    Editar ou Excluir Categorias do Menu ({categories.length})
+              <div className="p-3.5 rounded-2xl bg-[#FAF6F2] border border-[#E8DDD2] space-y-3 animate-fade-in shadow-2xs">
+                <div className="flex items-center justify-between pb-1.5 border-b border-[#EFE7DC]">
+                  <span className="text-xs font-bold text-[#201510] flex items-center gap-1.5">
+                    <Settings2 className="w-3.5 h-3.5 text-[#8C6B4F]" />
+                    Gestão de Categorias ({categories.length})
                   </span>
                   <button
                     type="button"
                     onClick={() => setIsManagingCategories(false)}
-                    className="text-stone-400 hover:text-stone-700 p-0.5"
+                    className="text-stone-400 hover:text-stone-700 p-0.5 cursor-pointer"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                  {categories.map((cat) => {
-                    const isEditing = editingCategoryId === cat.id;
-                    return (
-                      <div
-                        key={cat.id}
-                        className="p-2 rounded-xl bg-white border border-stone-200/90 flex flex-col gap-1.5"
-                      >
-                        {isEditing ? (
-                          <div className="space-y-1.5">
-                            <input
-                              type="text"
-                              value={editCategoryLabel}
-                              onChange={(e) => setEditCategoryLabel(e.target.value)}
-                              placeholder="Nome da categoria"
-                              className="w-full px-2.5 py-1 text-xs rounded-lg border border-stone-300 focus:outline-none focus:border-[#8C6B4F]"
-                            />
-                            <input
-                              type="text"
-                              value={editCategoryDescription}
-                              onChange={(e) => setEditCategoryDescription(e.target.value)}
-                              placeholder="Descrição breve (opcional)"
-                              className="w-full px-2.5 py-1 text-xs rounded-lg border border-stone-300 focus:outline-none focus:border-[#8C6B4F]"
-                            />
-                            <div className="flex justify-end gap-1.5 pt-0.5">
+
+                {/* Adicionar Nova Categoria no Gerenciar */}
+                <div className="space-y-1">
+                  <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-[#8C6B4F]">
+                    Criar Nova Categoria
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newCategoryLabel}
+                      onChange={(e) => setNewCategoryLabel(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddCategory();
+                        }
+                      }}
+                      placeholder="Nome da categoria (ex: Banho de Gel, Spa dos Pés...)"
+                      className="flex-1 px-3 py-1.5 rounded-xl border border-stone-200 bg-white text-stone-800 text-xs focus:outline-none focus:border-[#8C6B4F]"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddCategory}
+                      disabled={!newCategoryLabel.trim()}
+                      className="px-3 py-1.5 rounded-xl bg-[#201510] text-white text-xs font-semibold hover:bg-[#38261E] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 shadow-2xs cursor-pointer shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-[#C5A88E]" />
+                      <span>Adicionar</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Lista de Categorias com Remover e Editar */}
+                <div className="space-y-1 pt-1">
+                  <label className="block text-[10.5px] uppercase tracking-wider font-semibold text-[#8C6B4F]">
+                    Categorias Existentes (Remover / Editar)
+                  </label>
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                    {categories.map((cat) => {
+                      const isEditing = editingCategoryId === cat.id;
+                      const isSelectedForThis = category === cat.id;
+                      return (
+                        <div
+                          key={cat.id}
+                          className={`p-2 rounded-xl bg-white border flex items-center justify-between gap-2 ${
+                            isSelectedForThis ? 'border-[#8C6B4F] ring-1 ring-[#8C6B4F]/20' : 'border-stone-200/90'
+                          }`}
+                        >
+                          {isEditing ? (
+                            <div className="flex-1 flex items-center gap-1.5">
+                              <input
+                                type="text"
+                                value={editCategoryLabel}
+                                onChange={(e) => setEditCategoryLabel(e.target.value)}
+                                onKeyDown={async (e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    if (editCategoryLabel.trim()) {
+                                      const res = await updateCategory(cat.id, { label: editCategoryLabel.trim() });
+                                      if (!res.success) {
+                                        alert(res.error || 'Erro ao atualizar categoria');
+                                        return;
+                                      }
+                                      setEditingCategoryId(null);
+                                    }
+                                  }
+                                }}
+                                className="flex-1 px-2 py-1 text-xs rounded-lg border border-stone-300 focus:outline-none focus:border-[#8C6B4F]"
+                                autoFocus
+                              />
                               <button
                                 type="button"
-                                onClick={() => setEditingCategoryId(null)}
-                                className="px-2 py-0.5 text-[11px] font-medium text-stone-500 hover:bg-stone-100 rounded-md"
-                              >
-                                Cancelar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
+                                onClick={async () => {
                                   if (!editCategoryLabel.trim()) return;
-                                  updateCategory(cat.id, {
-                                    label: editCategoryLabel.trim(),
-                                    description: editCategoryDescription.trim() || undefined,
-                                  });
+                                  const res = await updateCategory(cat.id, { label: editCategoryLabel.trim() });
+                                  if (!res.success) {
+                                    alert(res.error || 'Erro ao atualizar categoria');
+                                    return;
+                                  }
                                   setEditingCategoryId(null);
                                 }}
-                                className="px-2.5 py-0.5 text-[11px] font-semibold bg-[#201510] text-white rounded-md flex items-center gap-1 shadow-2xs"
+                                className="px-2.5 py-1 text-xs font-semibold bg-[#201510] text-white rounded-lg flex items-center gap-1 shadow-2xs cursor-pointer"
                               >
                                 <Check className="w-3 h-3 text-[#C5A88E]" />
                                 <span>Salvar</span>
                               </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingCategoryId(null)}
+                                className="p-1 text-stone-400 hover:text-stone-700 cursor-pointer"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
                             </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="min-w-0 flex-1">
-                              <span className="text-xs font-semibold text-stone-800 block truncate">
-                                {cat.label}
-                              </span>
-                              {cat.description && (
-                                <span className="text-[10px] text-stone-500 block truncate">
-                                  {cat.description}
+                          ) : (
+                            <>
+                              <div 
+                                className="min-w-0 flex-1 flex items-center gap-2 cursor-pointer"
+                                onClick={() => setCategory(cat.id)}
+                              >
+                                <span className="text-xs font-semibold text-stone-800 truncate">
+                                  {cat.label}
                                 </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingCategoryId(cat.id);
-                                  setEditCategoryLabel(cat.label);
-                                  setEditCategoryDescription(cat.description || '');
-                                }}
-                                title="Editar nome e descrição desta categoria"
-                                className="w-6 h-6 rounded-lg flex items-center justify-center text-stone-500 hover:text-[#201510] hover:bg-stone-100 transition-colors"
-                              >
-                                <Edit2 className="w-3 h-3" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (categories.length <= 1) {
-                                    alert('É necessário manter pelo menos uma categoria cadastrada.');
-                                    return;
-                                  }
-                                  if (window.confirm(`Tem certeza que deseja remover a categoria "${cat.label}"? Os procedimentos vinculados a ela serão reorganizados.`)) {
-                                    deleteCategory(cat.id);
-                                    if (category === cat.id) {
-                                      const remaining = categories.filter(c => c.id !== cat.id);
-                                      setCategory(remaining[0]?.id || 'outros');
+                                {isSelectedForThis && (
+                                  <span className="text-[9.5px] px-1.5 py-0.5 rounded bg-[#FAF4ED] text-[#8C6B4F] border border-[#EADDCE] font-semibold shrink-0">
+                                    Selecionada
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingCategoryId(cat.id);
+                                    setEditCategoryLabel(cat.label);
+                                  }}
+                                  title="Editar nome da categoria"
+                                  className="w-6 h-6 rounded-lg flex items-center justify-center text-stone-500 hover:text-[#201510] hover:bg-stone-100 transition-colors cursor-pointer"
+                                >
+                                  <Edit2 className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    if (confirmDeleteId === cat.id) {
+                                      const res = await deleteCategory(cat.id);
+                                      if (!res.success) {
+                                        setSaveError(res.error || 'Erro ao remover categoria');
+                                        setConfirmDeleteId(null);
+                                        return;
+                                      }
+                                      if (category === cat.id) {
+                                        const remaining = categories.filter(c => c.id !== cat.id);
+                                        setCategory(remaining[0]?.id || 'outros');
+                                      }
+                                      setConfirmDeleteId(null);
+                                    } else {
+                                      setConfirmDeleteId(cat.id);
                                     }
-                                  }
-                                }}
-                                title="Excluir categoria"
-                                className="w-6 h-6 rounded-lg flex items-center justify-center text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                                  }}
+                                  title={confirmDeleteId === cat.id ? "Confirmar exclusão" : "Excluir categoria"}
+                                  className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                                    confirmDeleteId === cat.id 
+                                      ? 'bg-red-500 text-white hover:bg-red-600' 
+                                      : 'text-red-500 hover:text-red-700 hover:bg-red-50'
+                                  }`}
+                                >
+                                  {confirmDeleteId === cat.id ? <Check className="w-3 h-3" /> : <Trash2 className="w-3 h-3" />}
+                                </button>
+                                {confirmDeleteId === cat.id && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmDeleteId(null)}
+                                    className="w-6 h-6 rounded-lg flex items-center justify-center text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* Lista de Seleção de Categorias */}
+            {/* Lista de Seleção de Categorias para o Procedimento */}
             <div className="flex flex-wrap gap-2 pt-1">
               {categories.map((cat) => (
                 <button
                   type="button"
                   key={cat.id}
                   onClick={() => setCategory(cat.id)}
-                  className={`py-2 px-3.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                  className={`py-2 px-3.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5 ${
                     category === cat.id
                       ? 'bg-[#201510] text-white border-[#201510] shadow-xs'
                       : 'bg-[#FAF6F2] text-stone-700 border-[#E8DDD2] hover:bg-stone-100'
                   }`}
                 >
-                  {cat.label}
+                  {category === cat.id && <Check className="w-3 h-3 text-[#C5A88E]" />}
+                  <span>{cat.label}</span>
                 </button>
               ))}
             </div>
@@ -758,55 +637,48 @@ export const AdminServiceModal: React.FC<AdminServiceModalProps> = ({
             />
           </div>
 
-          {/* SEÇÃO DE IMAGEM: UPLOAD, PRESET OU REMOÇÃO */}
+          {/* SEÇÃO DE IMAGEM DO SERVIÇO: SOMENTE 1 FOTO */}
           <div className="p-4 rounded-2xl bg-[#FAF6F2] border border-[#EADDCF] space-y-3">
             <div className="flex items-center justify-between">
               <label className="text-xs uppercase tracking-wider font-bold text-[#201510] flex items-center gap-1.5">
                 <ImageIcon className="w-4 h-4 text-[#8C6B4F]" />
-                Fotos do Serviço ({imagesList.length})
+                Foto do Procedimento
               </label>
+              <span className="text-[11px] text-[#76685F]">{image ? '1 foto selecionada' : 'Sem foto'}</span>
             </div>
 
-            {/* Preview da Galeria */}
-            <div className="flex flex-wrap gap-3 mb-2">
-              {imagesList.map((url, idx) => (
-                <div key={idx} className="relative w-20 h-20 rounded-xl overflow-hidden border border-[#D9CCC1] shadow-xs group">
+            <div className="flex items-center gap-4">
+              {image ? (
+                <div className="relative w-24 h-24 rounded-2xl overflow-hidden border border-[#D9CCC1] shadow-xs group bg-white shrink-0">
                   <img
-                    src={url}
-                    alt={`Preview ${idx + 1}`}
+                    src={image}
+                    alt="Foto do procedimento"
                     className="w-full h-full object-cover"
+                    onError={(e) => { (e.target as any).src = '/logo_gabi_header.png'; }}
                   />
                   <button
                     type="button"
-                    onClick={() => handleRemoveImage(idx)}
-                    className="absolute top-1 right-1 w-6 h-6 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center text-red-500 shadow-sm hover:bg-red-50 hover:text-red-600 transition-colors z-10"
+                    onClick={() => setImage('')}
+                    className="absolute top-1.5 right-1.5 w-6 h-6 bg-white/95 backdrop-blur-xs rounded-full flex items-center justify-center text-red-500 shadow-sm hover:bg-red-50 hover:text-red-600 transition-colors z-10 cursor-pointer"
                     title="Remover Foto"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
-                  {idx === 0 && (
-                     <div className="absolute bottom-0 inset-x-0 bg-[#8C6B4F]/90 text-white text-[9px] text-center font-bold py-0.5">
-                       Capa
-                     </div>
-                  )}
                 </div>
-              ))}
-              
-              {imagesList.length === 0 && (
-                <div className="w-20 h-20 rounded-xl border border-[#D9CCC1] bg-white flex flex-col items-center justify-center text-stone-400">
+              ) : (
+                <div className="w-24 h-24 rounded-2xl border border-dashed border-[#D9CCC1] bg-white flex flex-col items-center justify-center text-stone-400 shrink-0">
                   <ImageIcon className="w-6 h-6 mb-1 text-stone-300" />
-                  <span className="text-[9px] font-medium leading-tight text-center">Sem foto</span>
+                  <span className="text-[9.5px] font-medium leading-tight text-center">Sem foto</span>
                 </div>
               )}
-            </div>
 
-            <div className="space-y-2 flex-1 min-w-0">
-              <p className="text-xs text-[#6E5D53]">
-                Você pode adicionar várias imagens. A primeira será usada como capa.
-              </p>
+              <div className="space-y-2 flex-1 min-w-0">
+                <p className="text-xs text-[#6E5D53]">
+                  {image 
+                    ? 'Foto pronta. Clique em Salvar Alterações para gravar.' 
+                    : 'Selecione 1 foto do seu dispositivo para ilustrar este serviço (Máx: 1MB).'}
+                </p>
 
-              {/* Botões de Ação para Imagem */}
-              <div className="flex flex-wrap gap-2 pt-1">
                 <input
                   type="file"
                   ref={fileInputRef}
@@ -814,33 +686,28 @@ export const AdminServiceModal: React.FC<AdminServiceModalProps> = ({
                   accept="image/*"
                   className="hidden"
                 />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="px-3.5 py-1.5 rounded-xl bg-white border border-[#D9CCC1] text-[#201510] text-xs font-semibold hover:bg-stone-50 transition-colors flex items-center gap-1.5 shadow-2xs"
-                >
-                  <Upload className="w-3.5 h-3.5 text-[#8C6B4F]" />
-                  Adicionar
-                </button>
 
-                <button
-                  type="button"
-                  onClick={() => setIsUrlMode(!isUrlMode)}
-                  className="px-3 py-1.5 rounded-xl bg-white border border-[#D9CCC1] text-stone-600 text-xs font-medium hover:bg-stone-50 transition-colors"
-                >
-                  Link (URL)
-                </button>
-                
-                {imagesList.length > 0 && (
+                <div className="flex items-center gap-2 pt-0.5">
                   <button
                     type="button"
-                    onClick={() => setImagesList([])}
-                    className="px-3 py-1.5 rounded-xl bg-red-50 border border-red-100 text-red-600 text-xs font-medium hover:bg-red-100 transition-colors flex items-center gap-1.5 ml-auto"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3.5 py-2 rounded-xl bg-white border border-[#D9CCC1] text-[#201510] text-xs font-semibold hover:bg-stone-50 transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Limpar
+                    <Upload className="w-3.5 h-3.5 text-[#8C6B4F]" />
+                    <span>{image ? 'Alterar Foto' : 'Adicionar Foto'}</span>
                   </button>
-                )}
+
+                  {image && (
+                    <button
+                      type="button"
+                      onClick={() => setImage('')}
+                      className="px-3 py-2 rounded-xl bg-red-50 border border-red-100 text-red-600 text-xs font-medium hover:bg-red-100 transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Remover</span>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -848,26 +715,6 @@ export const AdminServiceModal: React.FC<AdminServiceModalProps> = ({
               <p className="text-xs text-red-600 bg-red-50 p-2 rounded-lg border border-red-200">
                 {uploadError}
               </p>
-            )}
-
-            {/* Inserir URL manual */}
-            {isUrlMode && (
-              <div className="flex gap-2 pt-1">
-                <input
-                  type="url"
-                  placeholder="https://exemplo.com/foto-unha.jpg"
-                  value={customUrlInput}
-                  onChange={(e) => setCustomUrlInput(e.target.value)}
-                  className="flex-1 px-3 py-1.5 rounded-xl border border-stone-200 text-xs bg-white focus:outline-none focus:border-[#8C6B4F]"
-                />
-                <button
-                  type="button"
-                  onClick={handleApplyCustomUrl}
-                  className="px-3 py-1.5 rounded-xl bg-[#201510] text-white text-xs font-semibold"
-                >
-                  Adicionar
-                </button>
-              </div>
             )}
           </div>
 
@@ -964,16 +811,17 @@ export const AdminServiceModal: React.FC<AdminServiceModalProps> = ({
                         className="w-full px-3 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#8C6B4F] resize-none"
                       />
                     </div>
-                    
-                    <ComplementImageManager
-                      images={comp.images || []}
-                      onChange={(newImages) => handleUpdateComplement(comp.id, 'images', newImages)}
-                    />
                   </div>
                 ))}
               </div>
             )}
           </div>
+
+          {saveError && (
+            <p className="text-xs text-red-600 bg-red-50 p-3 rounded-xl border border-red-200">
+              {saveError}
+            </p>
+          )}
 
           {/* Botões do Rodapé */}
           <div className="pt-2 flex justify-end gap-2.5 border-t border-stone-100">

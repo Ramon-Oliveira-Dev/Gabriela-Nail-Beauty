@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Service, ComplementaryService } from '../types';
-import { formatCurrency, formatDuration, getDefaultServiceImage, getDefaultServiceGallery, getServiceCategory } from '../utils';
-import { Clock, Calendar, ArrowRight, ChevronLeft, ChevronRight, Check, Sparkles, X, Plus } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Service, ComplementaryService, ServiceCategory } from '../types';
+import { useStore } from '../StoreContext';
+import { formatCurrency, formatDuration, getDefaultServiceImage, getServiceCategory } from '../utils';
+import { Clock, ArrowRight, Check, Sparkles, X } from 'lucide-react';
 import { ComplementaryServicesModal } from './ComplementaryServicesModal';
 
 interface ServicesGridProps {
@@ -17,122 +18,55 @@ interface ServicesGridProps {
   onComplementModalChange?: (isOpen: boolean) => void;
 }
 
-const getCategoryBadge = (category?: string, name?: string): { label: string; color: string } => {
-  if (category === 'aplicacao') return { label: 'Aplicação', color: 'bg-[#201510] text-white' };
-  if (category === 'manutencao') return { label: 'Manutenção', color: 'bg-[#8C6B4F] text-white' };
+const getCategoryBadge = (
+  category?: string, 
+  name?: string,
+  categoriesList: ServiceCategory[] = []
+): { label: string; color: string } => {
+  if (category) {
+    const match = categoriesList.find(c => c.id === category || c.label.toLowerCase() === category.toLowerCase());
+    if (match) {
+      return { label: match.label, color: 'bg-[#201510] text-white' };
+    }
+    if (category !== 'todos') {
+      return { label: category, color: 'bg-[#201510] text-white' };
+    }
+  }
   const n = (name || '').toLowerCase();
   if (n.includes('manuten')) return { label: 'Manutenção', color: 'bg-[#8C6B4F] text-white' };
-  if (n.includes('along')) return { label: 'Aplicação', color: 'bg-[#201510] text-white' };
-  return { label: 'Cuidados', color: 'bg-stone-800 text-white' };
+  if (n.includes('along') || n.includes('fibra') || n.includes('molde')) return { label: 'Aplicação', color: 'bg-[#201510] text-white' };
+  return { label: 'Procedimento', color: 'bg-[#201510] text-white' };
 };
 
-/**
- * Retorna as imagens para o carrossel de cada serviço.
- * Se o serviço já tiver uma galeria definida em `service.images`, usa ela.
- * Caso contrário, monta o conjunto temático com as imagens padrão correspondentes.
- */
-const getServiceImages = (service: Service): string[] => {
-  const defaultGallery = getDefaultServiceGallery(service);
-  const defaultImg = getDefaultServiceImage(service);
-
-  let resultImages: string[] = [];
-
-  if (service.images && service.images.length > 0) {
-    const validImages = service.images
-      .filter((img) => typeof img === 'string' && img.trim() !== '')
-      .map((img) => {
-        if (img === '/service_alongamento.jpg') return '/gallery/nail_almond.jpg';
-        if (img === '/service_gel.jpg') return '/gallery/nail_care.jpg';
-        if (img === '/service_manicure.jpg') return '/gallery/nail_french.jpg';
-        if (img === '/service_nailart.jpg') return '/gallery/nail_art_1.jpg';
-        if (img === '/test_nails.jpg') return '/gallery/nail_salon.jpg';
-        if (img === '/hero_nails.jpg') return '/gallery/nail_almond.jpg';
-        return img;
-      });
-    resultImages = Array.from(new Set(validImages));
-  } else if (service.imageUrl && service.imageUrl.trim() !== '') {
-    resultImages = [service.imageUrl];
-  }
-
-  // Se tiver menos de 2 fotos, combina com a galeria padrão temática para o carrossel girar perfeitamente
-  if (resultImages.length < 2) {
-    const combined = Array.from(new Set([...resultImages, ...defaultGallery]));
-    return combined.length > 0 ? combined : [defaultImg];
-  }
-
-  return resultImages;
-};
-
-interface CardImageCarouselProps {
-  images: string[];
+interface CardImageProps {
+  imageSrc: string;
   serviceName: string;
   badge: { label: string; color: string };
   durationMinutes: number;
-  intervalMs?: number;
 }
 
 /**
- * Carrossel automático de imagens mantendo rigorosamente o layout e padrão visual do card.
+ * Exibição de 1 foto estática para o serviço sem carrossel automático.
  */
-const CardImageCarousel: React.FC<CardImageCarouselProps> = ({
-  images,
+const CardImage: React.FC<CardImageProps> = ({
+  imageSrc,
   serviceName,
   badge,
   durationMinutes,
-  intervalMs = 3800,
 }) => {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isHovered, setIsHovered] = useState(false);
-
-  // Transição automática cronometrada
-  useEffect(() => {
-    if (images.length <= 1 || isHovered) return;
-
-    const timer = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % images.length);
-    }, intervalMs);
-
-    return () => clearInterval(timer);
-  }, [images.length, isHovered, intervalMs]);
-
-  const handlePrev = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setCurrentIndex((prev) => (prev - 1 + images.length) % images.length);
-  };
-
-  const handleNext = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setCurrentIndex((prev) => (prev + 1) % images.length);
-  };
-
   return (
-    <div
-      className="relative aspect-[4/3] sm:h-44 md:h-52 w-full overflow-hidden bg-stone-100 select-none"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onTouchStart={() => setIsHovered(true)}
-      onTouchEnd={() => setIsHovered(false)}
-    >
-      {/* Imagens empilhadas com transição suave em cross-fade */}
-      {images.map((img, idx) => {
-        const isActive = idx === currentIndex;
-        return (
-          <img
-            key={img + idx}
-            src={img}
-            alt={`${serviceName} - foto ${idx + 1}`}
-            className={`absolute inset-0 w-full h-full object-cover object-center group-hover:scale-105 transition-all duration-700 ease-in-out ${
-              isActive ? 'opacity-100 z-1' : 'opacity-0 z-0 pointer-events-none'
-            }`}
-            loading={idx === 0 ? 'eager' : 'lazy'}
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).src = getDefaultServiceImage({ name: serviceName, category: badge.label });
-            }}
-          />
-        );
-      })}
+    <div className="relative aspect-[4/3] sm:h-44 md:h-52 w-full overflow-hidden bg-stone-100 select-none">
+      <img
+        src={imageSrc}
+        alt={serviceName}
+        className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out"
+        loading="lazy"
+        onError={(e) => {
+          (e.currentTarget as HTMLImageElement).src = getDefaultServiceImage({ name: serviceName, category: badge.label });
+        }}
+      />
 
-      {/* Badge de Categoria */}
+      {/* Badge de Categoria que reflete a categoria selecionada */}
       <div className="absolute top-2 left-2 sm:top-3 sm:left-3 z-10 pointer-events-none">
         <span className={`text-[9px] sm:text-[10px] font-bold tracking-wider uppercase px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full shadow-2xs backdrop-blur-xs ${badge.color}`}>
           {badge.label}
@@ -144,52 +78,6 @@ const CardImageCarousel: React.FC<CardImageCarouselProps> = ({
         <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-[#C5A88E]" />
         <span>{formatDuration(durationMinutes)}</span>
       </div>
-
-      {/* Controles manuais sutis no hover e dots de navegação */}
-      {images.length > 1 && (
-        <>
-          {/* Botões laterais discretos no hover */}
-          <button
-            type="button"
-            onClick={handlePrev}
-            aria-label="Foto anterior"
-            className="absolute left-1.5 top-1/2 -translate-y-1/2 z-20 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-xs cursor-pointer shadow-xs"
-          >
-            <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={handleNext}
-            aria-label="Próxima foto"
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 z-20 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-xs cursor-pointer shadow-xs"
-          >
-            <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          </button>
-
-          {/* Indicadores / Mini dots centralizados */}
-          <div
-            className="absolute bottom-2 sm:bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-black/40 backdrop-blur-xs px-1.5 py-0.5 rounded-full"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {images.map((_, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setCurrentIndex(idx);
-                }}
-                className={`h-1 sm:h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
-                  idx === currentIndex
-                    ? 'w-3.5 sm:w-4 bg-white'
-                    : 'w-1 sm:w-1.5 bg-white/50 hover:bg-white/85'
-                }`}
-                aria-label={`Ver foto ${idx + 1}`}
-              />
-            ))}
-          </div>
-        </>
-      )}
     </div>
   );
 };
@@ -206,7 +94,8 @@ export const ServicesGrid: React.FC<ServicesGridProps> = ({
   onUpdateComplements,
   onComplementModalChange,
 }) => {
-  const [categoryFilter, setCategoryFilter] = useState<'todos' | 'aplicacao' | 'manutencao' | 'outros'>('todos');
+  const { categories } = useStore();
+  const [categoryFilter, setCategoryFilter] = useState<string>('todos');
   const [modalParentService, setModalParentService] = useState<Service | null>(null);
 
   const handleOpenComplementsModal = (service: Service) => {
@@ -226,9 +115,19 @@ export const ServicesGrid: React.FC<ServicesGridProps> = ({
   const displayedServices = useMemo(() => {
     if (!services || services.length === 0) return [];
     if (categoryFilter === 'todos') return services;
-    const filtered = services.filter(s => getServiceCategory(s) === categoryFilter);
-    return filtered.length > 0 ? filtered : services;
-  }, [services, categoryFilter]);
+    return services.filter(s => {
+      if (s.category === categoryFilter) return true;
+      const catObj = categories.find(c => c.id === categoryFilter);
+      if (catObj) {
+        if (s.category === catObj.id) return true;
+        if ((s.category || '').toLowerCase() === catObj.label.toLowerCase()) return true;
+      }
+      if (categoryFilter === 'aplicacao' && getServiceCategory(s) === 'aplicacao') return true;
+      if (categoryFilter === 'manutencao' && getServiceCategory(s) === 'manutencao') return true;
+      if (categoryFilter === 'outros' && getServiceCategory(s) === 'outros') return true;
+      return false;
+    });
+  }, [services, categoryFilter, categories]);
 
   if (!services || services.length === 0) return null;
 
@@ -265,8 +164,8 @@ export const ServicesGrid: React.FC<ServicesGridProps> = ({
         description: comp.description,
         price: comp.price,
         durationMinutes: comp.durationMinutes,
-        imageUrl: comp.images?.[0],
-        images: comp.images,
+        imageUrl: undefined,
+        images: [],
         category: 'outros',
         parentId: parentService.id,
         parentServiceName: parentService.name,
@@ -292,28 +191,33 @@ export const ServicesGrid: React.FC<ServicesGridProps> = ({
         </div>
       </div>
 
-      {/* Categorias: Todos, Aplicações, Manutenções, Outros Serviços (Sem Scroll Horizontal) */}
-      <div className="grid grid-cols-4 gap-1.5 sm:gap-2 mb-4 sm:mb-6 w-full max-w-2xl mx-auto">
-        {[
-          { id: 'todos', label: 'Todos' },
-          { id: 'aplicacao', label: 'Aplicações' },
-          { id: 'manutencao', label: 'Manutenções' },
-          { id: 'outros', label: 'Outros', fullLabel: 'Outros Serviços' },
-        ].map((cat) => {
+      {/* Categorias Dinâmicas para o Menu da Cliente */}
+      <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 mb-4 sm:mb-6 w-full max-w-2xl mx-auto">
+        <button
+          type="button"
+          onClick={() => setCategoryFilter('todos')}
+          className={`py-2 px-3 sm:px-4 rounded-full text-[11px] sm:text-xs font-semibold transition-all text-center truncate cursor-pointer ${
+            categoryFilter === 'todos'
+              ? 'bg-[#201510] text-white shadow-xs'
+              : 'bg-[#FAF6F2] text-[#76685F] hover:bg-[#F2EAE1] hover:text-[#201510] border border-[#EFE5DC]'
+          }`}
+        >
+          Todos
+        </button>
+        {categories.map((cat) => {
           const isActive = categoryFilter === cat.id;
           return (
             <button
               key={cat.id}
               type="button"
-              onClick={() => setCategoryFilter(cat.id as any)}
-              className={`w-full py-2 px-1 sm:px-3 rounded-full text-[11px] sm:text-xs font-semibold transition-all text-center truncate cursor-pointer ${
+              onClick={() => setCategoryFilter(cat.id)}
+              className={`py-2 px-3 sm:px-4 rounded-full text-[11px] sm:text-xs font-semibold transition-all text-center truncate cursor-pointer ${
                 isActive
                   ? 'bg-[#201510] text-white shadow-xs'
                   : 'bg-[#FAF6F2] text-[#76685F] hover:bg-[#F2EAE1] hover:text-[#201510] border border-[#EFE5DC]'
               }`}
             >
-              <span className="sm:hidden">{cat.label}</span>
-              <span className="hidden sm:inline">{cat.fullLabel || cat.label}</span>
+              {cat.label}
             </button>
           );
         })}
@@ -321,10 +225,9 @@ export const ServicesGrid: React.FC<ServicesGridProps> = ({
 
       {/* Grid Organizado de 2 em 2 no Mobile e 3 a 4 colunas em telas maiores */}
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-5 md:gap-6 w-full">
-        {displayedServices.map((service, cardIndex) => {
-          const images = getServiceImages(service);
-          const badge = getCategoryBadge(service.category, service.name);
-          const intervalMs = 3600 + (cardIndex % 3) * 600;
+        {displayedServices.map((service) => {
+          const imageSrc = service.imageUrl || service.images?.[0] || getDefaultServiceImage(service);
+          const badge = getCategoryBadge(service.category, service.name, categories);
           const isSelected = selectedServices.some(s => s.id === service.id);
           
           // Identifica complementos selecionados para este procedimento específico
@@ -352,13 +255,12 @@ export const ServicesGrid: React.FC<ServicesGridProps> = ({
                 </div>
               )}
 
-              {/* Imagem do Procedimento com Carrossel Automático */}
-              <CardImageCarousel
-                images={images}
+              {/* Imagem do Procedimento Estática sem Carrossel */}
+              <CardImage
+                imageSrc={imageSrc}
                 serviceName={service.name}
                 badge={badge}
                 durationMinutes={service.durationMinutes}
-                intervalMs={intervalMs}
               />
 
               {/* Informações do Card */}
@@ -468,7 +370,7 @@ export const ServicesGrid: React.FC<ServicesGridProps> = ({
                       )}
                     </button>
 
-                    {/* Botão para ver fotos e detalhes dos complementos */}
+                    {/* Botão para ver detalhes dos complementos */}
                     {service.complements && service.complements.length > 0 && (
                       <button
                         id={`btn-complements-service-${service.id}`}
@@ -478,10 +380,10 @@ export const ServicesGrid: React.FC<ServicesGridProps> = ({
                           handleOpenComplementsModal(service);
                         }}
                         className="text-[10px] sm:text-[11px] text-[#8C6B4F] hover:text-[#54463E] font-medium text-center hover:underline py-0.5 cursor-pointer flex items-center justify-center gap-1"
-                        title="Ver fotos e detalhes dos complementos"
+                        title="Ver detalhes dos complementos"
                       >
                         <Sparkles className="w-3 h-3 text-[#8C6B4F]" />
-                        <span>Ver fotos dos complementos</span>
+                        <span>Ver detalhes dos complementos</span>
                       </button>
                     )}
                   </div>
