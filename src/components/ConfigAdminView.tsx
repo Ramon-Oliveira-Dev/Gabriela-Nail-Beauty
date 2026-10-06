@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useStore, sanitizeWorkingHours } from '../StoreContext';
-import { Block, WorkingDay } from '../types';
-import { formatDate, formatPhoneMask } from '../utils';
+import { Appointment, Block, WorkingDay } from '../types';
+import { formatDate, formatShortDate, formatPhoneMask, timeToMinutes } from '../utils';
 import { 
   X, 
   Check, 
@@ -28,7 +28,7 @@ export interface ConfigAdminViewProps {
 }
 
 export const ConfigAdminView: React.FC<ConfigAdminViewProps> = ({ initialTab = 'horarios' }) => {
-  const { config, setConfig, blocks, setBlocks, syncWithSupabase, isSupabaseConnected } = useStore();
+  const { config, setConfig, blocks, addBlock, deleteBlock, appointments, syncWithSupabase, isSupabaseConnected } = useStore();
   const [activeTab, setActiveTab] = useState<'horarios' | 'bloqueios' | 'estudio'>(initialTab);
 
   useEffect(() => {
@@ -59,6 +59,8 @@ export const ConfigAdminView: React.FC<ConfigAdminViewProps> = ({ initialTab = '
   const [blockReason, setBlockReason] = useState('');
   const [blockSuccessMsg, setBlockSuccessMsg] = useState<string | null>(null);
   const [blockErrorMsg, setBlockErrorMsg] = useState<string | null>(null);
+  const [isSubmittingBlock, setIsSubmittingBlock] = useState(false);
+  const [conflictModal, setConflictModal] = useState<{ datesToBlock: string[]; conflicts: Appointment[] } | null>(null);
 
   // Modal de confirmação in-app para exclusão de bloqueios (sem window.confirm)
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{
@@ -200,7 +202,81 @@ export const ConfigAdminView: React.FC<ConfigAdminViewProps> = ({ initialTab = '
   }, [selectedMonths]);
 
   // Criação dos bloqueios conforme escopo selecionado
-  const handleCreateBlocks = (e: React.FormEvent) => {
+  const executeSaveBlocks = async (datesToBlock: string[]) => {
+    setIsSubmittingBlock(true);
+    setBlockErrorMsg(null);
+
+    // Pula duplicatas: se já existe bloqueio de dia inteiro na data, ou parcial com mesmo início e fim
+    let alreadyBlockedCount = 0;
+    const toSave: string[] = [];
+
+    for (const d of datesToBlock) {
+      const isDuplicate = blocks.some(b => 
+        b.date === d && (
+          b.isFullDay || 
+          (!b.isFullDay && !isFullDay && b.startTime === blockStartTime && b.endTime === blockEndTime)
+        )
+      );
+
+      if (isDuplicate) {
+        alreadyBlockedCount++;
+      } else {
+        toSave.push(d);
+      }
+    }
+
+    if (toSave.length === 0) {
+      setIsSubmittingBlock(false);
+      setBlockErrorMsg(
+        alreadyBlockedCount === 1
+          ? 'Este horário já está bloqueado nesta data.'
+          : 'Todos os dias e horários selecionados já estão bloqueados.'
+      );
+      return;
+    }
+
+    let savedCount = 0;
+    let failureError: string | null = null;
+
+    for (const date of toSave) {
+      const newBlock: Block = {
+        id: crypto.randomUUID(),
+        date,
+        isFullDay,
+        startTime: isFullDay ? undefined : blockStartTime,
+        endTime: isFullDay ? undefined : blockEndTime,
+        reason: blockReason.trim() || undefined
+      };
+
+      const res = await addBlock(newBlock);
+      if (!res.success) {
+        failureError = res.error || 'Erro ao gravar bloqueio no servidor.';
+        break;
+      }
+      savedCount++;
+    }
+
+    setIsSubmittingBlock(false);
+
+    if (failureError) {
+      const partialMsg = savedCount > 0
+        ? `Falha ao gravar bloqueio: ${failureError} (${savedCount} bloqueio(s) gravado(s) antes da falha).`
+        : `Falha ao gravar bloqueio: ${failureError}`;
+      setBlockErrorMsg(partialMsg);
+      return;
+    }
+
+    setSelectedDates([]);
+    setDateInputVal('');
+    setBlockReason('');
+    const successMsg = alreadyBlockedCount > 0
+      ? `${savedCount} bloqueio(s) aplicado(s) com sucesso! (${alreadyBlockedCount} já estava(m) cadastrado(s))`
+      : `${savedCount} bloqueio(s) aplicado(s) com sucesso!`;
+    setBlockSuccessMsg(successMsg);
+    setTimeout(() => setBlockSuccessMsg(null), 3500);
+  };
+
+  const handleCreateBlocks = async (e: React.FormEvent) => {
     e.preventDefault();
     setBlockErrorMsg(null);
     let datesToBlock: string[] = [];
@@ -249,33 +325,40 @@ export const ConfigAdminView: React.FC<ConfigAdminViewProps> = ({ initialTab = '
       datesToBlock = Array.from(new Set(datesToBlock)).sort();
     }
 
-    if (!isFullDay && (!blockStartTime || !blockEndTime)) {
-      setBlockErrorMsg('Preencha o horário de início e término do bloqueio.');
+    if (!isFullDay) {
+      const timeRegex = /^\d{2}:\d{2}$/;
+      if (!blockStartTime || !blockEndTime || !timeRegex.test(blockStartTime) || !timeRegex.test(blockEndTime)) {
+        setBlockErrorMsg('Preencha o horário de início e término no formato válido (HH:MM).');
+        return;
+      }
+      if (timeToMinutes(blockStartTime) >= timeToMinutes(blockEndTime)) {
+        setBlockErrorMsg('O horário de término deve ser depois do início.');
+        return;
+      }
+    }
+
+    // Conflito com agendamentos: checar agendamentos ativos na data que sobreponham o bloqueio
+    const activeApps = appointments.filter(a => a.status !== 'cancelled' && datesToBlock.includes(a.date));
+    let conflictingApps: Appointment[] = [];
+
+    if (isFullDay) {
+      conflictingApps = activeApps;
+    } else {
+      const bStart = timeToMinutes(blockStartTime);
+      const bEnd = timeToMinutes(blockEndTime);
+      conflictingApps = activeApps.filter(app => {
+        const aStart = timeToMinutes(app.startTime);
+        const aEnd = timeToMinutes(app.endTime);
+        return Math.max(aStart, bStart) < Math.min(aEnd, bEnd);
+      });
+    }
+
+    if (conflictingApps.length > 0) {
+      setConflictModal({ datesToBlock, conflicts: conflictingApps });
       return;
     }
 
-    // Criar os registros de bloqueio
-    const newBlocks: Block[] = datesToBlock.map(date => ({
-      id: Math.random().toString(36).substring(2, 9) + Date.now().toString(36),
-      date,
-      isFullDay,
-      startTime: isFullDay ? undefined : blockStartTime,
-      endTime: isFullDay ? undefined : blockEndTime,
-      reason: blockReason.trim() || undefined
-    }));
-
-    // Remove eventuais bloqueios idênticos pré-existentes para evitar duplicações
-    const updatedBlocks = [
-      ...blocks.filter(b => !datesToBlock.includes(b.date) || (isFullDay ? false : !b.isFullDay)),
-      ...newBlocks
-    ];
-
-    setBlocks(updatedBlocks);
-    setSelectedDates([]);
-    setDateInputVal('');
-    setBlockReason('');
-    setBlockSuccessMsg(`${newBlocks.length} dia(s) bloqueado(s) com sucesso!`);
-    setTimeout(() => setBlockSuccessMsg(null), 3500);
+    await executeSaveBlocks(datesToBlock);
   };
 
   // Gerenciamento de seleção múltipla para exclusão de bloqueios
@@ -328,27 +411,49 @@ export const ConfigAdminView: React.FC<ConfigAdminViewProps> = ({ initialTab = '
   };
 
   // Confirmação final da exclusão
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deleteConfirmModal) return;
+    setBlockErrorMsg(null);
 
+    let idsToDelete: string[] = [];
     if (deleteConfirmModal.type === 'all') {
-      const totalDeleted = blocks.length;
-      setBlocks([]);
-      setSelectedBlockIds([]);
-      setBlockSuccessMsg(`Todos os ${totalDeleted} bloqueios foram apagados com sucesso!`);
+      idsToDelete = blocks.map(b => b.id);
     } else if (deleteConfirmModal.type === 'selected') {
-      const totalDeleted = selectedBlockIds.length;
-      setBlocks(blocks.filter(b => !selectedBlockIds.includes(b.id)));
-      setSelectedBlockIds([]);
-      setBlockSuccessMsg(`${totalDeleted} bloqueio(s) apagado(s) com sucesso!`);
+      idsToDelete = [...selectedBlockIds];
     } else if (deleteConfirmModal.type === 'single' && deleteConfirmModal.blockId) {
-      const targetId = deleteConfirmModal.blockId;
-      setBlocks(blocks.filter(b => b.id !== targetId));
-      setSelectedBlockIds(prev => prev.filter(id => id !== targetId));
-      setBlockSuccessMsg('Bloqueio apagado com sucesso!');
+      idsToDelete = [deleteConfirmModal.blockId];
     }
 
+    let deletedCount = 0;
+    let failureError: string | null = null;
+
+    for (const id of idsToDelete) {
+      const res = await deleteBlock(id);
+      if (!res.success) {
+        failureError = res.error || 'Erro ao excluir bloqueio do servidor.';
+        break;
+      }
+      deletedCount++;
+    }
+
+    setSelectedBlockIds(prev => prev.filter(id => !idsToDelete.slice(0, deletedCount).includes(id)));
     setDeleteConfirmModal(null);
+
+    if (failureError) {
+      const partialMsg = deletedCount > 0
+        ? `Falha ao excluir: ${failureError} (${deletedCount} bloqueio(s) excluído(s) antes da falha).`
+        : `Falha ao excluir bloqueio: ${failureError}`;
+      setBlockErrorMsg(partialMsg);
+      return;
+    }
+
+    if (deleteConfirmModal.type === 'all') {
+      setBlockSuccessMsg(`Todos os ${deletedCount} bloqueios foram apagados com sucesso!`);
+    } else if (deleteConfirmModal.type === 'selected') {
+      setBlockSuccessMsg(`${deletedCount} bloqueio(s) apagado(s) com sucesso!`);
+    } else {
+      setBlockSuccessMsg('Bloqueio apagado com sucesso!');
+    }
     setTimeout(() => setBlockSuccessMsg(null), 3500);
   };
 
@@ -838,7 +943,7 @@ export const ConfigAdminView: React.FC<ConfigAdminViewProps> = ({ initialTab = '
                             key={dStr} 
                             className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white border border-[#D9CCC1] text-xs font-medium text-[#2B2520] shadow-2xs"
                           >
-                            <span>{formatShortDate(dStr)}</span>
+                            <span>{formatBlockDate(dStr)}</span>
                             <button
                               type="button"
                               onClick={() => handleRemoveDateFromSelection(dStr)}
@@ -873,11 +978,11 @@ export const ConfigAdminView: React.FC<ConfigAdminViewProps> = ({ initialTab = '
                   />
                   {weekStartDate && (
                     <p className="text-[11px] text-[#8C6B4F] font-medium pt-1">
-                      Período de bloqueio: {formatShortDate(weekStartDate)} até {(() => {
+                      Período de bloqueio: {formatBlockDate(weekStartDate)} até {(() => {
                         const [y, m, d] = weekStartDate.split('-').map(Number);
                         const end = new Date(y, m - 1, d);
                         end.setDate(end.getDate() + 6);
-                        return formatShortDate(`${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`);
+                        return formatBlockDate(`${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`);
                       })()} (7 dias)
                     </p>
                   )}
@@ -1075,9 +1180,10 @@ export const ConfigAdminView: React.FC<ConfigAdminViewProps> = ({ initialTab = '
 
             <button 
               type="submit" 
-              className="w-full py-4 rounded-2xl bg-[#1C1713] text-[#F7F1E8] text-[11px] font-bold tracking-[0.16em] uppercase hover:bg-[#332B23] transition-colors cursor-pointer shadow-xs"
+              disabled={isSubmittingBlock}
+              className="w-full py-4 rounded-2xl bg-[#1C1713] text-[#F7F1E8] text-[11px] font-bold tracking-[0.16em] uppercase hover:bg-[#332B23] transition-colors cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              CONFIRMAR E APLICAR BLOQUEIO
+              {isSubmittingBlock ? 'GRAVANDO BLOQUEIO...' : 'CONFIRMAR E APLICAR BLOQUEIO'}
             </button>
           </form>
 
@@ -1148,7 +1254,7 @@ export const ConfigAdminView: React.FC<ConfigAdminViewProps> = ({ initialTab = '
                   .map(b => {
                      const bDate = parseDateStr(b.date);
                      const weekDays = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
-                     const dateLabel = `${formatShortDate(b.date)} · ${weekDays[bDate.getDay()]}`;
+                     const dateLabel = `${formatBlockDate(b.date)} · ${weekDays[bDate.getDay()]}`;
                      const detailLabel = b.isFullDay 
                        ? `Dia inteiro ${b.reason ? '— ' + b.reason : ''}`
                        : `${b.startTime} às ${b.endTime} ${b.reason ? '— ' + b.reason : ''}`;
@@ -1261,6 +1367,65 @@ export const ConfigAdminView: React.FC<ConfigAdminViewProps> = ({ initialTab = '
                         ? `Apagar (${deleteConfirmModal.count})`
                         : 'Sim, Apagar'}
                     </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Modal de Conflito com Agendamentos Existentes */}
+          {conflictModal && (
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-[#EAE2D7] space-y-5 animate-scale-in">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700 shrink-0">
+                    <AlertCircle className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-serif text-xl font-bold text-[#201510]">
+                      Conflito com Agendamentos
+                    </h4>
+                    <p className="text-xs text-[#6D5D52] mt-1.5 leading-relaxed">
+                      Existem <strong>{conflictModal.conflicts.length}</strong> atendimento(s) agendado(s) que coincidem com este período de bloqueio:
+                    </p>
+                  </div>
+                </div>
+
+                <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
+                  {conflictModal.conflicts.map(app => (
+                    <div key={app.id} className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl text-xs space-y-0.5">
+                      <p className="font-bold text-[#201510]">{app.clientName}</p>
+                      <p className="text-[#6D5D52]">
+                        {formatShortDate(app.date)} às {app.startTime} - {app.endTime}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="text-[11px] text-stone-500 italic">
+                  Nenhum agendamento será cancelado ou alterado automaticamente.
+                </p>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setConflictModal(null)}
+                    disabled={isSubmittingBlock}
+                    className="flex-1 py-3 px-4 rounded-xl border border-[#D9CCC1] text-[#54463E] text-xs font-bold hover:bg-stone-50 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    Voltar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const dates = conflictModal.datesToBlock;
+                      setConflictModal(null);
+                      executeSaveBlocks(dates);
+                    }}
+                    disabled={isSubmittingBlock}
+                    className="flex-1 py-3 px-4 rounded-xl bg-[#201510] hover:bg-[#38261E] text-white text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50 text-center"
+                  >
+                    Bloquear mesmo assim
                   </button>
                 </div>
               </div>
@@ -1407,7 +1572,7 @@ function parseDateStr(dateStr: string) {
   return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
 }
 
-function formatShortDate(dateStr: string) {
+function formatBlockDate(dateStr: string) {
   const [y, m, d] = dateStr.split('-');
   const months = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
   return `${d} ${months[parseInt(m) - 1]}`;

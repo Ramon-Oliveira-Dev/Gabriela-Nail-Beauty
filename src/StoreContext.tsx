@@ -137,6 +137,21 @@ const isSeedClient = (phoneOrKey: string, profile?: any): boolean => {
 
 const defaultAppointments: Appointment[] = [];
 
+const mapAppointmentRow = (a: any): Appointment => ({
+  id: String(a.id),
+  serviceId: a.service_id || 'custom',
+  serviceNames: a.service_names || undefined,
+  date: a.date,
+  startTime: a.start_time,
+  endTime: a.end_time,
+  clientName: a.client_name || '',
+  clientPhone: a.client_phone || '',
+  status: a.status || 'pending',
+  price: Number(a.price) || 0,
+  notes: a.notes || undefined,
+  reminderSent: Boolean(a.reminder_sent)
+});
+
 const defaultClientProfiles: Record<string, ClientProfile> = {};
 
 const defaultServices: Service[] = [
@@ -380,6 +395,8 @@ export interface StoreContextType {
   deleteCategory: (id: string) => Promise<{ success: boolean; error?: string }>;
   appointments: Appointment[];
   setAppointments: (apps: Appointment[]) => void;
+  refreshAppointments: () => Promise<void>;
+  notifySlotsChanged: (date?: string) => void;
   blocks: Block[];
   addBlock: (block: Block) => Promise<AppointmentResult>;
   updateBlock: (id: string, updates: Partial<Block>) => Promise<AppointmentResult>;
@@ -756,6 +773,48 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
     };
   }, [services, categories, appointments, blocks, config, clientProfiles, deletedClientPhones, catalogContent]);
 
+  const isAdminUserRef = useRef(isAdminUser);
+  useEffect(() => {
+    isAdminUserRef.current = isAdminUser;
+  }, [isAdminUser]);
+
+  const notifySlotsChanged = useCallback((date?: string) => {
+    if (realtimeSyncChannelRef.current) {
+      try {
+        realtimeSyncChannelRef.current.send({
+          type: 'broadcast',
+          event: 'SLOTS_CHANGED',
+          payload: { date }
+        });
+      } catch {}
+    }
+  }, []);
+
+  const refreshAppointments = useCallback(async () => {
+    if (!isAdminUserRef.current) return;
+    const client = getSupabaseClient();
+    if (!client) return;
+
+    try {
+      const { data: cloudAppointments, error: apptsErr } = await client
+        .from('appointments')
+        .select('*')
+        .order('date', { ascending: true })
+        .order('start_time', { ascending: true });
+
+      if (apptsErr) {
+        setAppointmentsErrorState(formatSupabaseErrorMessage(apptsErr));
+        return;
+      }
+
+      setAppointmentsErrorState(null);
+      const loadedAppointments: Appointment[] = (cloudAppointments || []).map(mapAppointmentRow);
+      setAppointmentsState(loadedAppointments);
+    } catch (err: any) {
+      setAppointmentsErrorState(formatSupabaseErrorMessage(err));
+    }
+  }, []);
+
   // Canais ativos mantidos abertos para sincronização imediata
   const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
   const realtimeSyncChannelRef = useRef<any>(null);
@@ -949,22 +1008,18 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
       setAppointmentsErrorState(null);
 
       if (session?.user?.id) {
-        const userEmail = (session.user.email || '').toLowerCase().trim();
         const { data: adminRow, error: adminErr } = await client
           .from('admins')
-          .select('id, user_id, email')
-          .or(`user_id.eq.${session.user.id},email.ilike.${userEmail}`)
+          .select('user_id')
+          .eq('user_id', session.user.id)
           .maybeSingle();
 
         if (adminErr) {
+          console.warn('[Admin Check]', formatSupabaseErrorMessage(adminErr));
           setAdminCheckErrorState(formatSupabaseErrorMessage(adminErr));
-        }
-        isAdmin = Boolean(adminRow);
-
-        if (adminRow && !adminRow.user_id && session.user.id) {
-          try {
-            await client.from('admins').update({ user_id: session.user.id }).eq('id', adminRow.id);
-          } catch {}
+          isAdmin = false;
+        } else {
+          isAdmin = Boolean(adminRow);
         }
       }
       setIsAdminUserState(isAdmin);
@@ -1057,20 +1112,7 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
         setAppointmentsErrorState(formatSupabaseErrorMessage(apptsErr));
       }
 
-      const loadedAppointments: Appointment[] = (cloudAppointments || []).map((a: any) => ({
-        id: String(a.id),
-        serviceId: a.service_id || 'custom',
-        serviceNames: a.service_names || undefined,
-        date: a.date,
-        startTime: a.start_time,
-        endTime: a.end_time,
-        clientName: a.client_name || '',
-        clientPhone: a.client_phone || '',
-        status: a.status || 'pending',
-        price: Number(a.price) || 0,
-        notes: a.notes || undefined,
-        reminderSent: Boolean(a.reminder_sent)
-      }));
+      const loadedAppointments: Appointment[] = (cloudAppointments || []).map(mapAppointmentRow);
       setAppointmentsState(loadedAppointments);
 
       const { data: cloudClients } = await client.from('clients').select('*');
@@ -1116,6 +1158,19 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
 
   pullFromSupabaseRef.current = pullFromSupabase;
 
+  // Atualização periódica leve da agenda para admin enquanto aba estiver visível
+  useEffect(() => {
+    if (!isAdminUser) return;
+
+    const intervalId = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        refreshAppointments();
+      }
+    }, 20000);
+
+    return () => clearInterval(intervalId);
+  }, [isAdminUser, refreshAppointments]);
+
   // Inicialização e escuta Realtime Ultrarrápida / Sincronização Automática
   useEffect(() => {
     let isMounted = true;
@@ -1150,6 +1205,54 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
     };
     window.addEventListener('GABI_STATE_CHANGE', handleCustomChange);
 
+    const handleSlotsChanged = () => {
+      refreshAppointments();
+    };
+    window.addEventListener('GABI_SLOTS_CHANGED', handleSlotsChanged);
+
+    const removeAdminRealtime = () => {
+      if (adminRealtimeChannel && client) {
+        try {
+          client.removeChannel(adminRealtimeChannel);
+        } catch {}
+        adminRealtimeChannel = null;
+      }
+    };
+
+    const setupAdminRealtime = async () => {
+      if (adminRealtimeChannel || !client) {
+        return;
+      }
+      const { data: { session } } = await client.auth.getSession();
+      if (session?.user?.id) {
+        const { data: adminRow } = await client
+          .from('admins')
+          .select('user_id')
+          .eq('user_id', session.user.id)
+          .maybeSingle();
+
+        if (adminRow && isMounted && !adminRealtimeChannel) {
+          try {
+            adminRealtimeChannel = client
+              .channel('pwa_admin_db')
+              .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'appointments' },
+                () => refreshAppointments()
+              )
+              .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'clients' },
+                () => pullFromSupabase(true)
+              )
+              .subscribe();
+          } catch (adminRtErr) {
+            console.warn('[PWA Realtime] Falha ao assinar canal admin:', adminRtErr);
+          }
+        }
+      }
+    };
+
     // 3. Inicialização e canais do Supabase
     const init = async () => {
       if (client) {
@@ -1178,6 +1281,13 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
             .on('broadcast', { event: 'SYNC_UPDATE' }, () => {
               pullFromSupabase(true);
             })
+            .on('broadcast', { event: 'SLOTS_CHANGED' }, (payload: any) => {
+              if (typeof window !== 'undefined') {
+                try {
+                  window.dispatchEvent(new CustomEvent('GABI_SLOTS_CHANGED', { detail: payload }));
+                } catch {}
+              }
+            })
             .subscribe();
 
           realtimeSyncChannelRef.current = realtimeSyncChannel;
@@ -1194,7 +1304,7 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
               { event: '*', schema: 'public', table: 'services' },
               () => pullFromSupabase(true)
             )
-            .on(
+              .on(
               'postgres_changes',
               { event: '*', schema: 'public', table: 'schedule_blocks' },
               () => pullFromSupabase(true)
@@ -1210,36 +1320,6 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
         }
 
         // 3.3 Assinatura restrita para admin: appointments, clients
-        const setupAdminRealtime = async () => {
-          const { data: { session } } = await client.auth.getSession();
-          if (session?.user?.id) {
-            const userEmail = (session.user.email || '').toLowerCase().trim();
-            const { data: adminRow } = await client
-              .from('admins')
-              .select('id, user_id, email')
-              .or(`user_id.eq.${session.user.id},email.ilike.${userEmail}`)
-              .maybeSingle();
-            if (adminRow && isMounted) {
-              try {
-                adminRealtimeChannel = client
-                  .channel('pwa_admin_db')
-                  .on(
-                    'postgres_changes',
-                    { event: '*', schema: 'public', table: 'appointments' },
-                    () => pullFromSupabase(true)
-                  )
-                  .on(
-                    'postgres_changes',
-                    { event: '*', schema: 'public', table: 'clients' },
-                    () => pullFromSupabase(true)
-                  )
-                  .subscribe();
-              } catch (adminRtErr) {
-                console.warn('[PWA Realtime] Falha ao assinar canal admin:', adminRtErr);
-              }
-            }
-          }
-        };
         setupAdminRealtime();
       } else {
         const errorMsg = 'VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY não encontradas.';
@@ -1259,8 +1339,13 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
     // 3.4 Recarregamento imediato em login / logout
     let authSub: any = null;
     if (client) {
-      const { data } = client.auth.onAuthStateChange(() => {
+      const { data } = client.auth.onAuthStateChange((event, session) => {
         setTimeout(() => {
+          if (event === 'SIGNED_OUT' || !session) {
+            removeAdminRealtime();
+          } else if (event === 'SIGNED_IN' || session) {
+            setupAdminRealtime();
+          }
           pullFromSupabase(true);
         }, 0);
       });
@@ -1303,6 +1388,7 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('GABI_STATE_CHANGE', handleCustomChange);
+      window.removeEventListener('GABI_SLOTS_CHANGED', handleSlotsChanged);
       if (authSub) authSub.unsubscribe();
       if (broadcastChannel) broadcastChannel.close();
       broadcastChannelRef.current = null;
@@ -1313,11 +1399,9 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
       if (realtimeChannel && client) {
         try { client.removeChannel(realtimeChannel); } catch {}
       }
-      if (adminRealtimeChannel && client) {
-        try { client.removeChannel(adminRealtimeChannel); } catch {}
-      }
+      removeAdminRealtime();
     };
-  }, [pullFromSupabase]);
+  }, [pullFromSupabase, refreshAppointments]);
 
   // Gerenciamento de agendamentos com gravação direta no Supabase
   const addAppointment = async (app: Appointment): Promise<AppointmentResult> => {
@@ -1353,6 +1437,7 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
     };
     setAppointmentsState(prev => [created, ...prev.filter(a => a.id !== newId)]);
     broadcastStateChange({ appointments: [created, ...stateRef.current.appointments.filter(a => a.id !== newId)] });
+    notifySlotsChanged(app.date);
     return { success: true };
   };
 
@@ -1360,6 +1445,8 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
     const client = getSupabaseClient();
     if (!client) return { success: false, error: 'Supabase não conectado' };
 
+    const existing = stateRef.current.appointments.find(a => a.id === id);
+    const targetDate = updates.date || existing?.date;
     const dbUpdates: Record<string, any> = {};
     if (updates.status !== undefined) dbUpdates.status = updates.status;
     if (updates.date !== undefined) dbUpdates.date = updates.date;
@@ -1390,6 +1477,7 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
     });
     setAppointmentsState(updated);
     broadcastStateChange({ appointments: updated });
+    notifySlotsChanged(targetDate);
     return { success: true };
   };
 
@@ -1401,6 +1489,7 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
     const client = getSupabaseClient();
     if (!client) return { success: false, error: 'Supabase não conectado' };
 
+    const targetDate = stateRef.current.appointments.find(a => a.id === id)?.date;
     const { error } = await client.from('appointments').delete().eq('id', id);
     if (error) {
       const msg = formatSupabaseErrorMessage(error);
@@ -1410,6 +1499,7 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
     const updated = stateRef.current.appointments.filter(a => a.id !== id);
     setAppointmentsState(updated);
     broadcastStateChange({ appointments: updated });
+    notifySlotsChanged(targetDate);
     return { success: true };
   };
 
@@ -1437,6 +1527,7 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
     const updated = [...stateRef.current.blocks.filter(x => x.id !== newId), created];
     setBlocksState(updated);
     broadcastStateChange({ blocks: updated });
+    notifySlotsChanged(b.date);
     return { success: true };
   };
 
@@ -1444,6 +1535,8 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
     const client = getSupabaseClient();
     if (!client) return { success: false, error: 'Supabase não conectado' };
 
+    const existing = stateRef.current.blocks.find(b => b.id === id);
+    const targetDate = updates.date || existing?.date;
     const dbUpdates: Record<string, any> = {};
     if (updates.date !== undefined) dbUpdates.date = updates.date;
     if (updates.isFullDay !== undefined) dbUpdates.is_full_day = updates.isFullDay;
@@ -1460,6 +1553,7 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
     const updated = stateRef.current.blocks.map(b => b.id === id ? { ...b, ...updates } : b);
     setBlocksState(updated);
     broadcastStateChange({ blocks: updated });
+    notifySlotsChanged(targetDate);
     return { success: true };
   };
 
@@ -1467,6 +1561,7 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
     const client = getSupabaseClient();
     if (!client) return { success: false, error: 'Supabase não conectado' };
 
+    const targetDate = stateRef.current.blocks.find(b => b.id === id)?.date;
     const { error } = await client.from('schedule_blocks').delete().eq('id', id);
     if (error) {
       const msg = formatSupabaseErrorMessage(error);
@@ -1476,6 +1571,7 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
     const updated = stateRef.current.blocks.filter(b => b.id !== id);
     setBlocksState(updated);
     broadcastStateChange({ blocks: updated });
+    notifySlotsChanged(targetDate);
     return { success: true };
   };
 
@@ -1948,6 +2044,8 @@ export const StoreProvider: React.FC<{children: React.ReactNode}> = ({ children 
       categories, setCategories,
       addCategory, updateCategory, deleteCategory,
       appointments, setAppointments,
+      refreshAppointments,
+      notifySlotsChanged,
       blocks, addBlock, updateBlock, deleteBlock, setBlocks,
       config, setConfig,
       isAdminUser,
